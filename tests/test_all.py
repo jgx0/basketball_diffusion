@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -326,3 +327,58 @@ def test_branch_study_shape_validation():
 
     with pytest.raises(ValueError):
         BranchStudy(phi=np.zeros((5, 3)))
+
+
+# ---------------------------------------------------------------------------
+# SportVU archive extraction
+# ---------------------------------------------------------------------------
+def test_ensure_extracted_multi_archive(tmp_path):
+    """Regression: each .7z must extract to its own subdirectory.
+
+    The earlier skip logic treated ANY existing *.json in the raw dir as
+    'already extracted', so in multi-game batches only the first archive was
+    ever unpacked (observed on real Colab runs).
+    """
+    import zipfile
+
+    py7zr = pytest.importorskip("py7zr")
+    from src.sportvu import ensure_extracted
+
+    # build two minimal valid .7z archives, each containing a game JSON
+    games = {}
+    for i, name in enumerate(("01.01.2016.A.at.B", "01.02.2016.C.at.D")):
+        payload = json.dumps(
+            {"gameid": f"002150000{i}", "gamedate": "2016-01-0%d" % (i + 1), "events": []}
+        ).encode()
+        inner = tmp_path / f"{name}.json"
+        inner.write_bytes(payload)
+        arc = tmp_path / f"{name}.7z"
+        with py7zr.SevenZipFile(arc, "w") as z:
+            z.write(inner, arcname=f"{name}.json")
+        inner.unlink()
+        games[name] = payload
+
+    files = ensure_extracted(tmp_path)
+    stems = {f.stem for f in files}
+    assert stems == set(games), f"expected both games extracted, got {stems}"
+    # per-archive isolation: each JSON lives under its own subdirectory
+    for name in games:
+        assert (tmp_path / name / f"{name}.json").exists()
+    # idempotent re-run: no crash, same file set
+    again = ensure_extracted(tmp_path)
+    assert {f.stem for f in again} == stems
+    assert not (tmp_path / "01.01.2016.A.at.B.json").exists()  # never flattened
+
+
+def test_find_sportvu_files_dedupes_copies(tmp_path):
+    """Loose JSON + identical-size copy in a subdir -> one entry (shallowest)."""
+    from src.sportvu import find_sportvu_files
+
+    payload = b'{"gameid": "0021500492", "events": []}'
+    loose = tmp_path / "game.json"
+    loose.write_bytes(payload)
+    copy = tmp_path / "game-dir" / "game.json"
+    copy.parent.mkdir()
+    copy.write_bytes(payload)
+    files = find_sportvu_files(tmp_path)
+    assert len(files) == 1 and files[0] == loose

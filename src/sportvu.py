@@ -75,6 +75,12 @@ def ensure_extracted(raw_dir: str | Path) -> list[Path]:
     """Extract any *.7z archives found under raw_dir (requires py7zr).
 
     Returns the list of JSON paths available after extraction.
+
+    Each archive is extracted to a per-archive subdirectory named after the
+    archive stem, so multi-game batches never collide or shadow each other:
+    ``data/raw/01.01.2016.CHA.at.TOR.7z`` extracts to
+    ``data/raw/01.01.2016.CHA.at.TOR/0021500492.json``. Archives whose
+    subdirectory already contains a JSON are skipped (idempotent re-runs).
     """
     raw_dir = Path(raw_dir)
     archives = sorted(raw_dir.rglob("*.7z"))
@@ -87,18 +93,30 @@ def ensure_extracted(raw_dir: str | Path) -> list[Path]:
                 "Run: pip install py7zr"
             ) from e
         for arc in archives:
-            out_dir = arc.parent
+            out_dir = arc.parent / arc.stem
             if any(out_dir.glob("*.json")):
                 continue  # already extracted
+            out_dir.mkdir(parents=True, exist_ok=True)
             with py7zr.SevenZipFile(arc) as z:
                 z.extractall(out_dir)
     return find_sportvu_files(raw_dir)
 
 
 def find_sportvu_files(root: str | Path) -> list[Path]:
-    """Glob a data directory for raw game files (*.json or *.json.gz)."""
+    """Glob a data directory for raw game files (*.json or *.json.gz).
+
+    Duplicate copies of the same game (e.g. a loose JSON next to a freshly
+    extracted archive copy) are deduplicated by (filename, size), keeping the
+    shallowest path.
+    """
     root = Path(root)
-    return sorted(p for pat in ("*.json", "*.json.gz") for p in root.rglob(pat))
+    candidates = [p for pat in ("*.json", "*.json.gz") for p in root.rglob(pat)]
+    best: dict[tuple[str, int], Path] = {}
+    for p in candidates:
+        key = (p.name, p.stat().st_size)
+        if key not in best or len(p.parts) < len(best[key].parts):
+            best[key] = p
+    return sorted(best.values())
 
 
 def event_to_arrays(event: dict) -> dict:

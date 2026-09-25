@@ -57,7 +57,8 @@ expected-possession-value proxy, together with a statistical-power analysis
 showing that distribution-level realism metrics are session-stable at 16
 samples per branch while branch-level tactical contrasts require samples in
 the hundreds --- a negative result we regard as a necessary specification for
-any use of generative counterfactuals in sports analytics. The complete
+any use of generative counterfactuals in sports analytics, confirmed here
+across three independent GPU sessions. The complete
 pipeline runs end-to-end on a single GPU and is released with a Colab
 notebook, unit tests, and a behavioral simulator that doubles as an
 interpretable baseline and counterfactual ground truth.
@@ -119,13 +120,13 @@ and most scheme-sensitive action in modern basketball. Our contributions:
   counterfactuals (scheme mutation, handler swap) scored by roller openness,
   paint pressure, and an expected-possession-value proxy; a transparent
   behavioral simulator supplies interpretable baseline contrasts and label
-  balance. Replicated GPU sessions establish that realism metrics are stable
-  across runs while 16-sample branch contrasts are not statistically
-  resolvable, and we derive the sampling budget needed to make them so
-  (\S\ref{sec:experiments}).
+  balance. Three replicated GPU sessions establish that realism metrics are
+  stable across runs while 16-sample branch contrasts are not statistically
+  resolvable (the branch ordering permutes across sessions), and we derive
+  the sampling budget needed to make them so (\S\ref{sec:experiments}).
 \item \textbf{Reproducibility.} The repository executes the entire study ---
   archive download through evaluation report --- via one command on CPU and
-  one Colab notebook on GPU, including 18 unit tests and animated court-space
+  one Colab notebook on GPU, including 26 unit tests and animated court-space
   renders of generated possessions.
 \end{enumerate}
 
@@ -499,7 +500,9 @@ mean displacement error against condition-matched held-out futures. (iii)
 (i) \textbf{Roller openness}: fraction of frames after $t = 0.6\,T$ with no
 defender within 2\,m of the roller. (ii) \textbf{Paint pressure}: mean
 nearest-defender distance to the roller while it occupies the restricted-area
-neighborhood. (iii) \textbf{EPV proxy}:
+neighborhood, clamped at 10\,m (in practice the roller is rarely in the
+restricted-area neighborhood, so the statistic mostly reads the clamp;
+\S\ref{sec:res-cf}). (iii) \textbf{EPV proxy}:
 $\phi_{\text{EPV}} = \E\,[\,e^{-r_{\text{rim}}/4}\,
 \sigma(\text{sep} - 1.5)\,]$, a transparent rim-proximity $\times$ separation
 value functional standing in for a learned EPV model
@@ -517,9 +520,9 @@ ablation).
 PyTorch 2.x; 128-base U-Net (10.5\,M parameters); AdamW, lr $2\times10^{-4}$,
 weight decay 0.01, batch 64; EMA 0.999; gradient-norm clip 1.0. The CPU
 reference run executes 30 epochs at $\sim$5\,s/epoch (Apple silicon); the GPU
-run executes the released Colab notebook on an A100 at $\sim$0.6\,s/epoch for
+runs execute the released Colab notebook on an A100 at $\sim$0.6\,s/epoch for
 150 epochs, end to end (download through evaluation) in a single session.
-Checkpoints save every epoch; training resumes by rerun. All 18 unit tests
+Checkpoints save every epoch; training resumes by rerun. All 26 unit tests
 cover the loader, frame math, screen/label heuristics, physics terms, and
 sampler contract (shape, finiteness, anchor pinning, guidance sensitivity).
 One defect surfaced between the runs --- a CUDA-resident tensor passed to the
@@ -532,23 +535,36 @@ court; the renderer was rewritten in the data frame and now carries a
 pixel-level visibility check. The companion court-bounds physics term, which
 had inherited the same frame confusion, was corrected to the true half-court
 envelope $x' \in [-12.74, +0.5]$\,m. All statistics in this paper are computed
-from trajectory tensors, unaffected by either issue. Six unit tests cover
+from trajectory tensors, unaffected by either issue. Seven unit tests cover
 the branch-study estimators, including planted-effect detection, null
 calibration, and the required-$M$ extrapolation.
+
+A third multi-game ingest bug was caught by exactly this review process: the
+archive-extraction step skipped any archive whose containing directory
+already held a .json file, so in multi-game batches every archive
+after the first was silently never unpacked and the ingestion corpus quietly
+collapsed to a single game. The fix extracts each archive into its own
+per-archive subdirectory (idempotent, collision-free) and deduplicates game
+files by name and size; a regression test replays the failure with a
+two-archive fixture. The run reported in \S\ref{sec:results} predates the
+fix, which is why its ingestion log lists a single parsed game despite a
+larger download queue --- a provenance detail we report rather than hide.
 
 \section{Results}
 \label{sec:results}
 
-Numbers below come from two runs of the same released code. The
+Numbers below come from three runs of the same released code. The
 \emph{reference run} executes on CPU via \texttt{make data \&\& make train
 \&\& make evaluate} (30 epochs; 2{,}000 synthetic possessions plus the
-validation-game windows). The \emph{GPU run} executes the released Colab
+validation-game windows). The \emph{GPU runs} execute the released Colab
 notebook on an A100 (150 epochs; 1{,}000 synthetic possessions plus the real
-ingestion corpus --- one game in the reported session, yielding 10 real
-windows, so the mixture is $\sim$99\% synthetic; the multi-game scale-up of
-\S\ref{sec:impl} is the pre-registered next step). We emphasize provenance:
+ingestion corpus --- which the ingestion logs show collapsed to a single
+game in every reported session, yielding 10 real windows, so each
+mixture is $\sim$99\% synthetic; the multi-game scale-up of
+\S\ref{sec:impl} is the pre-registered next step, and the defect that
+dominated the real share is documented there). We emphasize provenance:
 these are framework-validation results, not headline NBA-scale claims, which
-require the multi-game corpus; their value is that two independent executions
+require the multi-game corpus; their value is that three independent executions
 of the identical pipeline bracket the method's stability and its sensitivity
 to training budget.
 
@@ -566,13 +582,21 @@ three real-format landmines we consider representative: the divergent moment
 schema (\S\ref{sec:corpus}), missing position arrays in dead-ball moments,
 and tracker spikes (\S\ref{sec:denoise}). A smoke train on the 10 real
 windows (tiny model, 6 epochs) completed with decreasing loss, validating the
-train path on real tensors. The GPU run independently re-executed the same
-ingestion from the Colab notebook (10 windows; geometric labels 8 drop, 0
-switch, 2 blitz). The label-distribution difference against the local run
+train path on real tensors. Each GPU session independently re-executed the
+same ingestion from the Colab notebook (10 windows; geometric labels 8 drop, 0
+switch, 2 blitz in every session --- identical because the RNG-free pipeline
+is deterministic given the same single game). The label-distribution
+difference against the local run
 (6/2/2) on the identical game reflects the heuristic's sensitivity to the
 decision-rule version --- the switch rule is the tightest of the three
 geometric predicates --- and is a concrete argument for the play-by-play
-label upgrade path noted in \S\ref{sec:limits}.
+label upgrade path noted in \S\ref{sec:limits}. A post-run audit traced the
+single-game collapse to the archive-extraction skip defect of
+\S\ref{sec:impl} (now fixed and regression-tested); the multi-game funnel
+counts of Appendix~\ref{app:funnel} therefore describe the validation game
+only, and we flag the single-game provenance of every number in
+\S\ref{sec:res-realism}--\S\ref{sec:res-cf} rather than implying season-scale
+ingestion.
 
 \subsection{Realism of generated possessions}
 \label{sec:res-realism}
@@ -580,23 +604,32 @@ label upgrade path noted in \S\ref{sec:limits}.
 Table~\ref{tab:realism} compares generators on the validation splits. The
 diffusion model converges cleanly under the stabilized physics recipe in all
 runs (val noise-MSE $1.04 \rightarrow 0.23$ over 30 CPU epochs;
-$0.96 \rightarrow 0.08$ over 150 GPU epochs in two independent sessions,
-with the physics term falling from 348 to $\sim$1.6 during training) and
+$0.96 \rightarrow 0.08$ over 150 GPU epochs in three independent sessions,
+with the physics term falling from 348 to $\sim$1.5--1.8 during training) and
 improves FTD from two orders of magnitude above the converged reference to
-14.6 (CPU) and 6.19/6.28 (two GPU sessions), with anchor-frame pinning exact
+14.6 (CPU) and 6.19/6.28/6.11 (three GPU sessions), with anchor-frame pinning exact
 (max frame-0 error $= 0$ by construction). At the GPU budget the diffusion
-model's ADE (1.66/1.64\,m) undercuts the behavioral simulator baseline
+model's ADE (1.66/1.64/1.67\,m) undercuts the behavioral simulator baseline
 (1.87\,m): the learned generator is already more faithful to held-out futures
 than the hand-written tactic model on this corpus. Notably, the
 session-to-session repeatability differs sharply by metric type:
-distribution-level quantities are stable (FTD 6.19 vs 6.28; ADE 1.66 vs
-1.64; velocity violations 0.233 vs 0.237 across identical-config GPU
+distribution-level quantities are stable (FTD 6.19/6.28/6.11; ADE
+1.66/1.64/1.67; velocity violations 0.233/0.237/0.237 across identical-config GPU
 sessions), while branch-level contrasts are not (\S\ref{sec:res-cf}) --- a
 dichotomy that governs how the framework's outputs may be used.
-Velocity-violation rates fall from 0.93 (epoch 10) to 0.23 (GPU), though they
+Velocity-violation rates fall from 0.93 (epoch 10) to $\approx$0.23 (GPU), though they
 remain above real data --- honest evidence that kinematic plausibility is the
 binding constraint and the motivation for the guidance mechanism of
-\S\ref{sec:guidance}. Baseline rows are computed on the reference-run split;
+\S\ref{sec:guidance}. Two measurement caveats sharpen the reading of the
+compliance column. First, the violation statistics are computed on the ten
+player tracks only; the ball --- whose pass-speed spikes are the most
+visibly implausible component of raw samples --- is excluded from the rate
+by the same player-only convention used for the real-data reference, so the
+0.23 figures are not directly comparable to a reader's impression from the
+videos. Second, the velocity cap (7.7\,m/s) is a \emph{per-frame
+finite-difference} statistic on noisy samples, and its residual excess over
+real data concentrates in high-noise samples rather than systematic
+overtaking-speed motion. Baseline rows are computed on the reference-run split;
 val splits differ across runs (both are dominated by the same simulator
 distribution), so cross-run comparisons of \emph{levels} are indicative,
 while within-run contrasts are the meaningful quantities.
@@ -604,9 +637,9 @@ while within-run contrasts are the meaningful quantities.
 \begin{table}[t]
 \centering
 \caption{Realism on the validation splits. Baseline rows use the
-reference-run split; diffusion rows are shown for both runs (splits differ,
-see text). Real-data compliance reflects residual tracking noise after
-cleaning.}
+reference-run split; diffusion rows are shown for all three GPU runs
+(splits differ, see text). Real-data compliance reflects residual tracking
+noise after cleaning.}
 \label{tab:realism}
 \begin{tabular}{lcccc}
 \toprule
@@ -616,7 +649,9 @@ Linear kinematic extrapolation & --- & 3.41 & 0.00 & 0.00 \\
 Behavioral simulator & --- & 1.87 & 0.00 & 0.01 \\
 Diffusion, epoch 10 & 1995 & 18.56 & 0.93 & 0.003 \\
 Diffusion, epoch 30 (CPU ref.) & 14.6 & 2.57 & 0.51 & 0.014 \\
-Diffusion, epoch 150 (GPU) & \textbf{6.19} & \textbf{1.66} & 0.23 & 0.018 \\
+Diffusion, epoch 150 (GPU A) & \textbf{6.19} & 1.66 & 0.233 & 0.018 \\
+Diffusion, epoch 150 (GPU B) & 6.28 & \textbf{1.64} & 0.237 & 0.019 \\
+Diffusion, epoch 150 (GPU C) & 6.11 & 1.67 & 0.237 & 0.018 \\
 \midrule
 Held-out real possessions & 0 (ref) & --- & 0.00 & 0.014 \\
 \bottomrule
@@ -628,28 +663,31 @@ Held-out real possessions & 0 (ref) & --- & 0.00 & 0.014 \\
 
 Fixing anchors from the validation split, we sample 16 futures per scheme
 branch with guidance $w = 1.5$, $\gamma = 0.5$ (Algorithm~\ref{alg:cf}).
-Table~\ref{tab:cf} reports branch statistics across three runs. The CPU
+Table~\ref{tab:cf} reports branch statistics across all four runs. The CPU
 reference reproduces the simulator's ground-truth ordering (drop openness
-$>$ switch $>$ blitz); the GPU sessions do not. The sampling-noise
+$>$ switch $>$ blitz); the three GPU sessions do not --- and, more striking
+than any single flip, each session produces a \emph{different} ordering
+(A: drop $>$ blitz $>$ switch; B: switch $>$ blitz $>$ drop; C: switch $>
+drop $>$ blitz). The sampling-noise
 arithmetic explains why, and we report it as a negative result of the
 protocol at this budget. First, per-sample roller openness is a
-binary-over-time statistic with large dispersion (per-sample SD 0.21--0.32
-across branches in the saved GPU draws), so a 16-sample branch mean carries
+binary-over-time statistic with large dispersion (per-sample SD 0.21--0.31
+across branches and sessions in the saved GPU draws), so a 16-sample branch mean carries
 SE $\approx$ 0.05--0.08, while the CPU-run branch gaps were 0.04--0.05:
-contrasts sit below one standard error. Second, two independent 16-draw
+contrasts sit below one standard error. Second, independent 16-draw
 estimates of the \emph{same} branch (the notebook's generator and evaluator,
 same anchors, different RNG state) disagree by up to 0.11 on drop openness
 --- more than the effect size being measured. Third, pairwise Welch and
-Mann--Whitney tests on the saved per-sample draws fail to reject equality of
-branch distributions at $\alpha{=}0.05$ (all $p \ge 0.15$). The honest
+Mann--Whitney tests on the saved per-sample draws of every GPU session fail
+to reject equality of branch distributions at $\alpha{=}0.05$ (all
+$p \ge 0.10$; run C, the newest, yields Welch $p{=}0.17$ for the largest
+pairwise gap, drop vs.\ switch openness). The honest
 conclusion is that at $M{=}16$, branch contrasts are \emph{directional
 indicators, not calibrated effect sizes}: the only session-stable quantities
 at this budget are the distribution-level metrics of
 \S\ref{sec:res-realism}. Resolving gaps of the observed magnitude requires
 $M$ of several hundred per branch (SE $\approx$ 0.015--0.02), which is a
-sampling-cost statement, not a model deficiency; the paired
-branch-study mode that implements exactly this protocol ships with the
-repository (\S\ref{sec:impl}). Accordingly, the released
+sampling-cost statement, not a model deficiency. Accordingly, the released
 repository implements the remedy as a first-class mode
 (\texttt{generate.py --branch-study M --anchors A}): a \emph{paired} design
 in which each of $A$ validation anchors is sampled $M$ times per branch,
@@ -664,22 +702,24 @@ A100 tier.
 \begin{table}[t]
 \centering
 \caption{Counterfactual branch statistics (same anchors; 16 samples/branch;
-three independent runs). Roller openness ordering flips across GPU sessions
-at this $M$ --- within sampling noise (SE $\approx$ 0.06 per branch mean);
-see text.}
+four independent runs). Paint pressure is omitted: it saturates at its
+10\,m clamp in every GPU session (9.75--9.82 in the CPU reference), so it
+carries no branch signal at this budget. Roller openness ordering permutes
+across the three GPU sessions at this $M$ --- within sampling noise
+(SE $\approx$ 0.06 per branch mean); see text.}
 \label{tab:cf}
-\begin{tabular}{lccc ccc ccc}
+\begin{tabular}{lcccccccc}
 \toprule
- & \multicolumn{3}{c}{CPU ref.\ (30 ep)} & \multicolumn{3}{c}{GPU A (150 ep)} & \multicolumn{3}{c}{GPU B (150 ep)} \\
-\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-10}
-Branch & Open. & Paint & EPV & Open. & Paint & EPV & Open. & Paint & EPV \\
+ & \multicolumn{2}{c}{CPU ref.\ (30 ep)} & \multicolumn{2}{c}{GPU A (150 ep)} & \multicolumn{2}{c}{GPU B (150 ep)} & \multicolumn{2}{c}{GPU C (150 ep)} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+Branch & Open. & EPV & Open. & EPV & Open. & EPV & Open. & EPV \\
 \midrule
-Drop & 0.269 & 9.82 & 0.1136 & 0.425 & 10.00 & 0.0915 & 0.306 & 10.00 & 0.0906 \\
-Switch & 0.231 & 9.75 & 0.1122 & 0.327 & 9.99 & 0.0902 & 0.397 & 10.00 & 0.0900 \\
-Blitz & 0.216 & 9.80 & 0.1138 & 0.345 & 10.00 & 0.0913 & 0.336 & 9.98 & 0.0918 \\
+Drop & \textbf{0.269} & 0.1136 & \textbf{0.425} & 0.0915 & 0.306 & 0.0906 & 0.408 & 0.0908 \\
+Switch & 0.231 & 0.1122 & 0.327 & 0.0902 & \textbf{0.397} & 0.0900 & \textbf{0.472} & 0.0889 \\
+Blitz & 0.216 & 0.1138 & 0.345 & 0.0913 & 0.336 & 0.0918 & 0.305 & 0.0880 \\
 \midrule
-Role handler & 0.247 & --- & 0.1113 & 0.303 & --- & 0.0924 & 0.370 & --- & 0.0892 \\
-Star handler & 0.208 & --- & 0.1158 & 0.264 & --- & 0.0896 & 0.359 & --- & 0.0905 \\
+Role handler & 0.247 & 0.1113 & 0.303 & 0.0924 & 0.370 & 0.0892 & 0.547 & 0.0877 \\
+Star handler & 0.208 & 0.1158 & 0.264 & 0.0896 & 0.359 & 0.0905 & 0.370 & 0.0895 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -688,7 +728,8 @@ Star handler & 0.208 & --- & 0.1158 & 0.264 & --- & 0.0896 & 0.359 & --- & 0.090
 \label{sec:res-qual}
 
 Court-space renders of generated branches (Fig.~\ref{fig:case}, MP4s in the
-artifact, including the GPU run's drop branch) show the qualitative
+artifact, re-rendered locally with the corrected renderer for every GPU
+session) show the qualitative
 signatures the metrics detect: under \emph{drop}, the screener's defender
 sinks below the free-throw line while the handler turns the corner into a
 pulling defense; under \emph{blitz}, both ball-side defenders converge above
@@ -751,6 +792,12 @@ evaluations per future, and \S\ref{sec:res-cf} shows branch contrasts require
 $M$ of several hundred per branch to be statistically resolvable;
 large-$M$ studies are therefore the operating point of the framework, not an
 optional extra. Consistency-style distillation is the obvious accelerator.
+Two residual realism gaps are tracked honestly in the artifacts: generated
+ball speeds exceed real passing speeds in a fraction of samples (the
+player-only compliance convention of \S\ref{sec:res-realism} excludes this
+from the headline rate), and the paint-pressure functional saturates at its
+clamp across branches, limiting its discriminative value until the
+restricted-area trigger is retuned or the functional replaced.
 
 \paragraph{Distribution shift.} 2015--16 coverages differ from modern
 schemes; conclusions are era-relative by construction.
@@ -780,7 +827,7 @@ that mirrors what randomized experimentation did for on-court decision
 policies: comparisons that hold the offense fixed and let the scheme vary.
 
 \section*{Reproducibility Statement}
-The repository implements every pipeline stage described here, with 18 unit
+The repository implements every pipeline stage described here, with 26 unit
 tests, a one-command CPU reference run (\texttt{make data train evaluate}),
 and a Colab notebook (\texttt{colab\_run.ipynb} + \texttt{COLAB.md}) that
 downloads public archives, ingests real data, trains on GPU, and emits
@@ -822,6 +869,14 @@ $\rightarrow$ 83 half-court possessions $\rightarrow$ 11 screen-anchored
 $\rightarrow$ 10 after denoising rejection. Scheme counts 6/2/2
 (drop/switch/blitz). Each stage is unit-tested; the funnel prints counts at
 runtime for corpus-level monitoring.
+
+\paragraph{Multi-game status.} All numbers above are single-game. Every
+reported Colab session ingested exactly this one game despite a larger
+download queue: the archive-extraction skip defect of \S\ref{sec:impl}
+prevented archives after the first from ever being unpacked. The fix
+(per-archive subdirectories, idempotent re-runs, name+size deduplication) is
+regression-tested; the first multi-game funnel counts will replace this
+paragraph's single-game caveat in the next revision.
 
 \section{Environment}
 \label{app:env}

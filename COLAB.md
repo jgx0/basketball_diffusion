@@ -182,6 +182,7 @@ recipe, which the notebook demonstrates).
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | `can't convert cuda:0 device type tensor to numpy` in cell 7 | pre-fix repo version | `git pull` in the repo dir (or `!sed -i 's/render_gif(gen\[0\], str/render_gif(gen[0].cpu().numpy(), str/' scripts/generate.py`) and rerun cells 7–8; data/checkpoints from cells 4–6 are reused, no retraining. |
+| **ingest_log shows only ONE parsed game despite `N_GAMES > 1`** | pre-fix repo version: the extractor skipped every archive whose directory already contained any `.json` (i.e., after the first game was extracted) | `git pull` in the repo dir and rerun **cell 4**; archives already downloaded are reused — each now extracts to its own `data/raw/<game-name>/` subfolder, and re-running cell 4 resumes training-data extraction with no re-download. Verify by counting `parsing` lines in `ingest_log.txt` — it should match `N_GAMES`. |
 | `py7zr` install fails | Colab pip cache | Restart runtime, rerun Cell 2. |
 | `No SportVU files under data/raw` | download blocked | Check `ls data/raw`; rerun Cell 4. |
 | `extracted 0 PnR windows` | detector found none | Loosen `detect_ball_screen` (`contact_dist` 1.2→1.4) in `src/normalize.py`. |
