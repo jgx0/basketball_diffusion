@@ -27,6 +27,24 @@ Two ways to run it:
 2. The notebook verifies `torch.cuda.is_available()` and falls back to CPU
    with a reduced-epoch warning if no GPU is attached.
 
+### Colab Pro recommendations
+
+| Setting | Free (T4) | Pro (A100) |
+| --- | --- | --- |
+| `N_GAMES` | 20 | **60** |
+| `SYNTHETIC_SUPPLEMENT` | 1500 | 1000–1500 |
+| `EPOCHS` | 60 | **100–150** |
+| Real corpus share | ~15–20% | ~40–50% |
+| Session length | ~3.5–5 h | ~3–4 h |
+
+With `N_GAMES > 20`, notebook cell 0 auto-extends the game list from the
+archive index (636 games available, Oct '15 – Jan '16) with a deterministic
+season-spread sample — no manual list editing needed. Expect ~12–20 PnR
+windows per game. At 60 games the corpus is roughly 700–1{,}200 real windows
+against 1{,}000–1{,}500 synthetic, which shifts the mixture decisively toward
+real data; that is the regime where the paper's realism tables are
+meaningful.
+
 ## 2. What the run does
 
 | Stage | Script | Typical time (T4) |
