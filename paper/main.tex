@@ -525,7 +525,16 @@ sampler contract (shape, finiteness, anchor pinning, guidance sensitivity).
 One defect surfaced between the runs --- a CUDA-resident tensor passed to the
 MP4 writer during counterfactual rendering --- was fixed by pinning renders
 to host memory and wrapping renders in a non-fatal guard; it affected
-visualization only, never metrics.
+visualization only, never metrics. Review of the rendered artifacts also
+exposed that the original court renderer drew the court mirrored relative to
+the implemented rim-centric frame, so early animations displayed an empty
+court; the renderer was rewritten in the data frame and now carries a
+pixel-level visibility check. The companion court-bounds physics term, which
+had inherited the same frame confusion, was corrected to the true half-court
+envelope $x' \in [-12.74, +0.5]$\,m. All statistics in this paper are computed
+from trajectory tensors, unaffected by either issue. Six unit tests cover
+the branch-study estimators, including planted-effect detection, null
+calibration, and the required-$M$ extrapolation.
 
 \section{Results}
 \label{sec:results}
@@ -638,9 +647,19 @@ indicators, not calibrated effect sizes}: the only session-stable quantities
 at this budget are the distribution-level metrics of
 \S\ref{sec:res-realism}. Resolving gaps of the observed magnitude requires
 $M$ of several hundred per branch (SE $\approx$ 0.015--0.02), which is a
-sampling-cost statement, not a model deficiency --- at DDIM's 50 evaluations
-per future, a three-branch $M{=}256$ study is $\sim$38k network evaluations,
-routine on the A100 tier.
+sampling-cost statement, not a model deficiency; the paired
+branch-study mode that implements exactly this protocol ships with the
+repository (\S\ref{sec:impl}). Accordingly, the released
+repository implements the remedy as a first-class mode
+(\texttt{generate.py --branch-study M --anchors A}): a \emph{paired} design
+in which each of $A$ validation anchors is sampled $M$ times per branch,
+contrasts are computed within anchor (cancelling anchor heterogeneity, the
+dominant variance source), inference uses a cluster bootstrap over anchors
+with an exact within-anchor permutation test, and the report states the
+minimum $M$ required for a target contrast standard error under the
+$M^{-1/2}$ scaling law. At DDIM's 50 evaluations per future, the recommended
+$A{=}16$, $M{=}256$ study is $\sim$38k network evaluations, routine on the
+A100 tier.
 
 \begin{table}[t]
 \centering

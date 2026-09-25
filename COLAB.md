@@ -131,6 +131,29 @@ files.download('outputs/eval/report.json')
 # MP4s and .npy counterfactuals are in outputs/counterfactuals/
 ```
 
+## 3.5 The branch study (cell 7.5) — how to get publishable contrasts
+
+The default counterfactual pass (cell 7) samples only 16 futures per scheme
+branch — enough to see the distributions move, but **not** enough to claim
+one scheme is more vulnerable than another: replicated sessions showed the
+branch ordering flips within sampling noise (SE ≈ 0.06 per branch mean vs
+effect sizes ≈ 0.04–0.05). Cell 7.5 fixes this with a **paired design**:
+
+- `BRANCH_ANCHORS` validation anchors × 3 schemes × `BRANCH_STUDY_M` futures
+  each, sampled in chunks;
+- contrasts computed **within anchor** (anchor heterogeneity cancels);
+- inference by cluster bootstrap over anchors + exact within-anchor
+  permutation test (`outputs/counterfactuals/branch_study.json`);
+- the report includes the **M required for SE ≤ 0.02** per contrast, so you
+  know the sampling budget before claiming an effect.
+
+**Costs (A100):** M=256, 16 anchors ≈ 45–75 min. Quick pass: M=64, 8 anchors
+≈ 10 min (enough to exercise the machinery, marginal for publication).
+
+Rule of thumb for reading the output: a contrast is credible when its 95% CI
+excludes 0 **and** the permutation p < 0.01. If required-M exceeds what you
+sampled, report the CI honestly rather than the point estimate.
+
 ## 4. Scaling up the corpus
 
 The pipeline is per-game linear; to use more of the season:

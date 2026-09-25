@@ -254,3 +254,75 @@ def test_detect_pass_fires_on_ball_release():
     xy[:, 10, 0] = np.concatenate([np.zeros(10), np.linspace(4, 12, 20)])
     t = detect_pass(xy)
     assert t is not None and 8 <= t <= 12
+
+
+# ---------------------------------------------------------------------------
+# Branch-study statistics
+# ---------------------------------------------------------------------------
+def _study_with_effect(A=30, M=40, effect=0.3, noise=0.25, seed=0):
+    from src.branch_study import BranchStudy
+
+    rng = np.random.default_rng(seed)
+    anchor_shift = rng.normal(0, 0.4, size=(A, 1, 1))  # anchor-level heterogeneity
+    phi_b0 = 0.5 + anchor_shift + rng.normal(0, noise, size=(A, 1, M))
+    phi_b1 = 0.5 + anchor_shift + effect + rng.normal(0, noise, size=(A, 1, M))
+    return BranchStudy(phi=np.concatenate([phi_b0, phi_b1], axis=1),
+                       branch_names=["ref", "treat"])
+
+
+def test_branch_study_detects_planted_effect():
+    study = _study_with_effect(effect=0.3)
+    rep = study.summary(n_boot=1000, seed=0)
+    pair = rep["bootstrap"]["pairs"][0]
+    assert abs(pair["delta"] - 0.3) < 0.08
+    assert pair["p_permutation"] < 0.05
+    pt = rep["paired_tests"][0]
+    assert pt["p_ttest"] < 0.01  # paired t-test has real power here
+
+
+def test_branch_study_flags_no_effect_when_null():
+    study = _study_with_effect(effect=0.0)
+    rep = study.summary(n_boot=1000, seed=1)
+    pair = rep["bootstrap"]["pairs"][0]
+    assert pair["p_permutation"] > 0.05
+    assert abs(pair["delta"]) < 0.1
+
+
+def test_branch_study_anchor_paired_beats_unpaired_noise():
+    # anchor heterogeneity is large; the paired contrast must cancel it, so
+    # the paired p-value is far more significant than an unpaired z would be
+    study = _study_with_effect(A=30, M=40, effect=0.15, noise=0.25, seed=3)
+    rep = study.summary(n_boot=1000, seed=0)
+    pair = rep["bootstrap"]["pairs"][0]
+    assert pair["p_permutation"] < 0.2  # paired: anchored variance cancels
+    # marginal (unpaired) means differ by much less precisely
+    bm = rep["branch_means"]
+    assert abs(bm["treat"] - bm["ref"]) > 0.05
+
+
+def test_required_m_monotone_and_plausible():
+    # low-noise config: SE target is already met at the current M
+    study = _study_with_effect(A=30, M=40, effect=0.3, noise=0.25)
+    r = study.required_m(target_se=0.02, n_boot=200, seed=1)[0]
+    assert r["se_at_current_m"] < r["se_at_half_m"]          # SE shrinks with M
+    assert r["target_met_at_current_m"] is True
+    assert r["required_m_for_se"]["0.02"] == 40
+
+
+def test_required_m_extrapolates_when_target_unmet():
+    # heavy noise: SE at M=40 exceeds the target, so required M must exceed 40
+    # and must match the sqrt-scaling law: M_req = M * (SE/target)^2
+    study = _study_with_effect(A=8, M=40, effect=0.3, noise=0.8)
+    r = study.required_m(target_se=0.02, n_boot=200, seed=1)[0]
+    assert r["target_met_at_current_m"] is False
+    m_need = r["required_m_for_se"]["0.02"]
+    expected = int(np.ceil(40 * (r["se_at_current_m"] / 0.02) ** 2))
+    assert m_need == expected > 40
+
+
+def test_branch_study_shape_validation():
+    import pytest
+    from src.branch_study import BranchStudy
+
+    with pytest.raises(ValueError):
+        BranchStudy(phi=np.zeros((5, 3)))
