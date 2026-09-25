@@ -52,10 +52,14 @@ and geometric coverage labeling; (ii) a temporal U-Net diffusion architecture
 with cross-attention conditioning and classifier-free guidance; (iii)
 physics-informed training regularization and sampling-time gradient guidance
 that we show are necessary for stable kinematically plausible generation; and
-(iv) a vulnerability protocol that quantifies tactical exposure through roller
-openness, paint pressure, and an expected-possession-value proxy. The
-complete pipeline runs end-to-end on a single GPU and is released with a
-Colab notebook, unit tests, and a behavioral simulator that doubles as an
+(iv) a vulnerability protocol over roller openness, paint pressure, and an
+expected-possession-value proxy, together with a statistical-power analysis
+showing that distribution-level realism metrics are session-stable at 16
+samples per branch while branch-level tactical contrasts require samples in
+the hundreds --- a negative result we regard as a necessary specification for
+any use of generative counterfactuals in sports analytics. The complete
+pipeline runs end-to-end on a single GPU and is released with a Colab
+notebook, unit tests, and a behavioral simulator that doubles as an
 interpretable baseline and counterfactual ground truth.
 \end{abstract}
 
@@ -111,10 +115,13 @@ and most scheme-sensitive action in modern basketball. Our contributions:
   hinges evaluated on low-noise probes, $\bar\alpha_k$-weighted, with the bulk
   of constraint enforcement applied as gradient guidance on intermediate $X_0$
   predictions during sampling (\S\ref{sec:physics}).
-\item \textbf{A vulnerability protocol.} Matched-branch counterfactuals
-  (scheme mutation, handler swap) scored by roller openness, paint pressure,
-  and an expected-possession-value proxy; a transparent behavioral simulator
-  supplies interpretable baseline contrasts and label balance
+\item \textbf{A vulnerability protocol and its power analysis.} Matched-branch
+  counterfactuals (scheme mutation, handler swap) scored by roller openness,
+  paint pressure, and an expected-possession-value proxy; a transparent
+  behavioral simulator supplies interpretable baseline contrasts and label
+  balance. Replicated GPU sessions establish that realism metrics are stable
+  across runs while 16-sample branch contrasts are not statistically
+  resolvable, and we derive the sampling budget needed to make them so
   (\S\ref{sec:experiments}).
 \item \textbf{Reproducibility.} The repository executes the entire study ---
   archive download through evaluation report --- via one command on CPU and
@@ -562,15 +569,21 @@ label upgrade path noted in \S\ref{sec:limits}.
 \label{sec:res-realism}
 
 Table~\ref{tab:realism} compares generators on the validation splits. The
-diffusion model converges cleanly under the stabilized physics recipe in both
+diffusion model converges cleanly under the stabilized physics recipe in all
 runs (val noise-MSE $1.04 \rightarrow 0.23$ over 30 CPU epochs;
-$0.96 \rightarrow 0.08$ over 150 GPU epochs, with the physics term falling
-from 348 to 1.6 during training) and improves FTD from two orders of
-magnitude above the converged reference to 14.6 (CPU) and 6.19 (GPU), with
-anchor-frame pinning exact (max frame-0 error $= 0$ by construction). At the
-GPU budget the diffusion model's ADE (1.66\,m) undercuts the behavioral
-simulator baseline (1.87\,m): the learned generator is already more faithful
-to held-out futures than the hand-written tactic model on this corpus.
+$0.96 \rightarrow 0.08$ over 150 GPU epochs in two independent sessions,
+with the physics term falling from 348 to $\sim$1.6 during training) and
+improves FTD from two orders of magnitude above the converged reference to
+14.6 (CPU) and 6.19/6.28 (two GPU sessions), with anchor-frame pinning exact
+(max frame-0 error $= 0$ by construction). At the GPU budget the diffusion
+model's ADE (1.66/1.64\,m) undercuts the behavioral simulator baseline
+(1.87\,m): the learned generator is already more faithful to held-out futures
+than the hand-written tactic model on this corpus. Notably, the
+session-to-session repeatability differs sharply by metric type:
+distribution-level quantities are stable (FTD 6.19 vs 6.28; ADE 1.66 vs
+1.64; velocity violations 0.233 vs 0.237 across identical-config GPU
+sessions), while branch-level contrasts are not (\S\ref{sec:res-cf}) --- a
+dichotomy that governs how the framework's outputs may be used.
 Velocity-violation rates fall from 0.93 (epoch 10) to 0.23 (GPU), though they
 remain above real data --- honest evidence that kinematic plausibility is the
 binding constraint and the motivation for the guidance mechanism of
@@ -606,38 +619,48 @@ Held-out real possessions & 0 (ref) & --- & 0.00 & 0.014 \\
 
 Fixing anchors from the validation split, we sample 16 futures per scheme
 branch with guidance $w = 1.5$, $\gamma = 0.5$ (Algorithm~\ref{alg:cf}).
-Table~\ref{tab:cf} reports branch statistics for both runs. The learned model
-reproduces the \emph{direction} of the simulator's ground-truth contrasts in
-both executions: drop yields the most roller openness (the big sagging toward
-the paint leaves the roll lane spacious; CPU 0.269, GPU 0.425), blitz
-compresses paint pressure most (two defenders at the ball) while conceding
-the most EPV proxy among scheme branches on CPU (pass-out advantage), and
-switch sits between on CPU. The star-handler branch lowers roller openness
-(defenses shrink earlier against elite gravity) while its EPV contrast is
-budget-limited on GPU; we treat the star contrast as inconclusive at the
-current mixture and expect it to sharpen as real windows dominate. We stress
-that absolute magnitudes are not yet calibrated to NBA defenses; the claim
-validated here is \emph{conditioned sensitivity} --- the model's distributions
-move measurably and in the right direction under label interventions, in two
-independent executions, which is the precondition for any tactical inference.
+Table~\ref{tab:cf} reports branch statistics across three runs. The CPU
+reference reproduces the simulator's ground-truth ordering (drop openness
+$>$ switch $>$ blitz); the GPU sessions do not. The sampling-noise
+arithmetic explains why, and we report it as a negative result of the
+protocol at this budget. First, per-sample roller openness is a
+binary-over-time statistic with large dispersion (per-sample SD 0.21--0.32
+across branches in the saved GPU draws), so a 16-sample branch mean carries
+SE $\approx$ 0.05--0.08, while the CPU-run branch gaps were 0.04--0.05:
+contrasts sit below one standard error. Second, two independent 16-draw
+estimates of the \emph{same} branch (the notebook's generator and evaluator,
+same anchors, different RNG state) disagree by up to 0.11 on drop openness
+--- more than the effect size being measured. Third, pairwise Welch and
+Mann--Whitney tests on the saved per-sample draws fail to reject equality of
+branch distributions at $\alpha{=}0.05$ (all $p \ge 0.15$). The honest
+conclusion is that at $M{=}16$, branch contrasts are \emph{directional
+indicators, not calibrated effect sizes}: the only session-stable quantities
+at this budget are the distribution-level metrics of
+\S\ref{sec:res-realism}. Resolving gaps of the observed magnitude requires
+$M$ of several hundred per branch (SE $\approx$ 0.015--0.02), which is a
+sampling-cost statement, not a model deficiency --- at DDIM's 50 evaluations
+per future, a three-branch $M{=}256$ study is $\sim$38k network evaluations,
+routine on the A100 tier.
 
 \begin{table}[t]
 \centering
 \caption{Counterfactual branch statistics (same anchors; 16 samples/branch;
-CPU reference run and GPU run).}
+three independent runs). Roller openness ordering flips across GPU sessions
+at this $M$ --- within sampling noise (SE $\approx$ 0.06 per branch mean);
+see text.}
 \label{tab:cf}
-\begin{tabular}{lcccccc}
+\begin{tabular}{lccc ccc ccc}
 \toprule
- & \multicolumn{3}{c}{CPU reference run} & \multicolumn{3}{c}{GPU run} \\
-\cmidrule(lr){2-4}\cmidrule(lr){5-7}
-Branch & Open.$\uparrow$ & Paint (m) & EPV & Open.$\uparrow$ & Paint (m) & EPV \\
+ & \multicolumn{3}{c}{CPU ref.\ (30 ep)} & \multicolumn{3}{c}{GPU A (150 ep)} & \multicolumn{3}{c}{GPU B (150 ep)} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-10}
+Branch & Open. & Paint & EPV & Open. & Paint & EPV & Open. & Paint & EPV \\
 \midrule
-Drop & 0.269 & 9.82 & 0.1136 & 0.425 & 10.00 & 0.0915 \\
-Switch & 0.231 & 9.75 & 0.1122 & 0.327 & 9.99 & 0.0902 \\
-Blitz & 0.216 & 9.80 & 0.1138 & 0.345 & 10.00 & 0.0913 \\
+Drop & 0.269 & 9.82 & 0.1136 & 0.425 & 10.00 & 0.0915 & 0.306 & 10.00 & 0.0906 \\
+Switch & 0.231 & 9.75 & 0.1122 & 0.327 & 9.99 & 0.0902 & 0.397 & 10.00 & 0.0900 \\
+Blitz & 0.216 & 9.80 & 0.1138 & 0.345 & 10.00 & 0.0913 & 0.336 & 9.98 & 0.0918 \\
 \midrule
-Role handler & 0.247 & --- & 0.1113 & 0.303 & --- & 0.0924 \\
-Star handler & 0.208 & --- & 0.1158 & 0.264 & --- & 0.0896 \\
+Role handler & 0.247 & --- & 0.1113 & 0.303 & --- & 0.0924 & 0.370 & --- & 0.0892 \\
+Star handler & 0.208 & --- & 0.1158 & 0.264 & --- & 0.0896 & 0.359 & --- & 0.0905 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -705,8 +728,10 @@ principled upgrade and is compatible with our pipeline (the proxy is a
 pure function of the trajectory tensor).
 
 \paragraph{Compute and sampling.} Diffusion sampling costs $S{=}50$ network
-evaluations per future; large-$M$ branch studies are GPU-bound.
-Consistency-style distillation is the obvious accelerator.
+evaluations per future, and \S\ref{sec:res-cf} shows branch contrasts require
+$M$ of several hundred per branch to be statistically resolvable;
+large-$M$ studies are therefore the operating point of the framework, not an
+optional extra. Consistency-style distillation is the obvious accelerator.
 
 \paragraph{Distribution shift.} 2015--16 coverages differ from modern
 schemes; conclusions are era-relative by construction.
@@ -720,8 +745,11 @@ consequential action. The technical contributions --- a validated ingestion
 path for the real SportVU archives, a conditional temporal U-Net diffusion
 model, a physics-regularization recipe that resolves the
 acceleration-amplification instability, and a matched-branch vulnerability
-protocol --- combine into a system whose counterfactual branches are
-anchor-identical, scheme-sensitive, and kinematically disciplined. Three
+protocol with an explicit power analysis --- combine into a system whose
+counterfactual branches are anchor-identical and kinematically disciplined,
+whose realism metrics replicate across independent sessions, and whose
+tactical contrasts are delivered with an honest statement of the sampling
+budget required before they may be read as effect sizes. Three
 extensions follow naturally: (i) scale --- the Colab recipe over the full
 public season, with real-only training once windows reach the tens of
 thousands; (ii) learned value --- replacing the EPV proxy with a trained

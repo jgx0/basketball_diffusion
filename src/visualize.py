@@ -1,8 +1,13 @@
 """Matplotlib rendering of half-court possessions to MP4 (requires ffmpeg).
 
+Frame convention (must match src/normalize.py): the attacked rim sits at the
+ORIGIN, the offense occupies x' <= 0 and advances toward the rim as
+x' -> 0-, y' is the signed lateral offset from the rim. All court geometry is
+drawn in THIS frame.
+
 Usage:
     from src.visualize import render_gif
-    render_gif(traj, "out.mp4")   # traj: (T, 11, 4) numpy array
+    render_gif(traj, "out.mp4")   # traj: (T, 11, 4) array or torch tensor
 """
 
 from __future__ import annotations
@@ -17,7 +22,6 @@ import numpy as np  # noqa: E402
 from matplotlib import animation, patches  # noqa: E402
 
 from src.constants import (
-    COURT_LENGTH_HALF,
     COURT_WIDTH,
     PAINT_LENGTH,
     PAINT_WIDTH,
@@ -26,28 +30,43 @@ from src.constants import (
     THREE_PT_RADIUS,
 )
 
+# Derived court geometry in the rim frame (meters). The rim is 5.25 ft from
+# the baseline and the half-court line is 47 ft from the baseline.
+BASELINE_X = -(5.25 * 0.3048)          # -1.60 m
+MIDCOURT_X = -(47.0 * 0.3048 - 5.25 * 0.3048)  # -12.73 m
+BACKBOARD_X = -1.22                    # backboard face (4 ft from baseline)
+
 OFF_COLORS = ["#c8102e", "#e0592a", "#e88b3a", "#f0b35b", "#f7d98c"]
 DEF_COLORS = ["#1d428a", "#2a5cb0", "#3a76c4", "#5a92d4", "#7aaee4"]
 
 
 def draw_half_court(ax: plt.Axes) -> None:
-    """Rim-centric half court: rim at origin, offense attacks toward +x."""
-    ax.add_patch(patches.Rectangle((-1.2, -COURT_WIDTH / 2), COURT_LENGTH_HALF + 1.2, COURT_WIDTH,
+    """Half court in the rim frame: rim at origin, baseline toward -x."""
+    # court rectangle: baseline -> midcourt
+    ax.add_patch(patches.Rectangle((MIDCOURT_X, -COURT_WIDTH / 2),
+                                   BASELINE_X - MIDCOURT_X, COURT_WIDTH,
                                    fill=False, edgecolor="black", lw=1.5))
+    # rim + backboard
     ax.add_patch(patches.Circle((0, 0), RIM_RADIUS, fill=False, edgecolor="orange", lw=2))
-    ax.add_patch(patches.Rectangle((-0.95, -RIM_RADIUS), 0.575, 2 * RIM_RADIUS, fill=True,
-                                   edgecolor="black", facecolor="black"))
-    ax.add_patch(patches.Rectangle((-1.2, -PAINT_WIDTH / 2), PAINT_LENGTH, PAINT_WIDTH,
+    ax.add_patch(patches.Rectangle((BACKBOARD_X - 0.06, -RIM_RADIUS), 0.06, 2 * RIM_RADIUS,
+                                   fill=True, edgecolor="black", facecolor="black"))
+    # the paint: baseline to the free-throw line
+    ax.add_patch(patches.Rectangle((BASELINE_X, -PAINT_WIDTH / 2), PAINT_LENGTH, PAINT_WIDTH,
                                    fill=False, edgecolor="black", lw=1))
-    ax.add_patch(patches.Arc((-1.2, 0), 2.4, 2.4, theta1=-90, theta2=90, edgecolor="black", lw=1))
-    # 3pt arc: arc + corner straight lines
-    theta_corner = np.degrees(np.arccos(
-        np.clip((THREE_PT_RADIUS ** 2 - THREE_PT_CORNER_Y ** 2) ** 0.5 / THREE_PT_RADIUS, -1, 1)))
-    ax.add_patch(patches.Arc((-1.2, 0), 2 * THREE_PT_RADIUS, 2 * THREE_PT_RADIUS,
-                             theta1=-theta_corner, theta2=theta_corner, edgecolor="black", lw=1))
-    corner_y = THREE_PT_CORNER_Y
-    ax.plot([-1.2, corner_y * 0 + 0], [corner_y, corner_y], color="black", lw=1)
-    ax.plot([-1.2, 0], [-corner_y, -corner_y], color="black", lw=1)
+    ax.add_patch(patches.Arc((BASELINE_X + PAINT_LENGTH, 0), 2 * 1.8, 2 * 1.8,
+                             theta1=-90, theta2=90, edgecolor="black", lw=1))
+    # 3-point line: arc around the rim + corner straight lines to the baseline
+    y_c = THREE_PT_CORNER_Y
+    r = THREE_PT_RADIUS
+    x_apex = np.sqrt(max(r**2 - y_c**2, 0.0))  # arc meets corner lines at |y| = y_c
+    theta = np.degrees(np.arctan2(y_c, x_apex))
+    ax.add_patch(patches.Arc((0, 0), 2 * r, 2 * r, theta1=180 - theta, theta2=180 + theta,
+                             edgecolor="black", lw=1))
+    ax.plot([BASELINE_X, -x_apex], [y_c, y_c], color="black", lw=1)
+    ax.plot([BASELINE_X, -x_apex], [-y_c, -y_c], color="black", lw=1)
+    # restricted-area arc under the rim
+    ax.add_patch(patches.Arc((0, 0), 2 * 1.25, 2 * 1.25, theta1=90, theta2=270,
+                             edgecolor="gray", lw=0.8))
 
 
 def render_gif(traj, path: str | Path, fps: int = 25) -> Path:
@@ -60,9 +79,9 @@ def render_gif(traj, path: str | Path, fps: int = 25) -> Path:
         traj = traj.detach().cpu().numpy()
     traj = np.asarray(traj)
     T = traj.shape[0]
-    fig, ax = plt.subplots(figsize=(7, 6.5))
+    fig, ax = plt.subplots(figsize=(7.5, 6.5))
     draw_half_court(ax)
-    ax.set_xlim(-1.4, COURT_LENGTH_HALF)
+    ax.set_xlim(MIDCOURT_X - 0.7, 1.2)
     ax.set_ylim(-COURT_WIDTH / 2 - 0.5, COURT_WIDTH / 2 + 0.5)
     ax.set_aspect("equal")
     ax.axis("off")

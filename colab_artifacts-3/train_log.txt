@@ -1,0 +1,197 @@
+train=909 val=101 device=cuda
+epoch 0 done in 1.4s | val noise-MSE 0.95567
+epoch 1 done in 0.6s | val noise-MSE 0.87360
+epoch 2 done in 0.6s | val noise-MSE 0.81268
+ep 3 step 50 | noise 0.7985 | phys 347.7202
+epoch 3 done in 0.6s | val noise-MSE 0.76418
+epoch 4 done in 0.6s | val noise-MSE 0.73576
+epoch 5 done in 0.6s | val noise-MSE 0.71456
+ep 6 step 100 | noise 0.6963 | phys 94.2127
+epoch 6 done in 0.7s | val noise-MSE 0.69302
+epoch 7 done in 0.7s | val noise-MSE 0.66862
+epoch 8 done in 0.7s | val noise-MSE 0.66600
+ep 9 step 150 | noise 0.6291 | phys 45.3023
+epoch 9 done in 0.6s | val noise-MSE 0.64285
+epoch 10 done in 0.6s | val noise-MSE 0.62741
+epoch 11 done in 0.7s | val noise-MSE 0.62172
+epoch 12 done in 0.6s | val noise-MSE 0.60328
+ep 13 step 200 | noise 0.5991 | phys 37.8676
+epoch 13 done in 0.6s | val noise-MSE 0.58906
+epoch 14 done in 0.6s | val noise-MSE 0.58008
+epoch 15 done in 0.6s | val noise-MSE 0.57215
+ep 16 step 250 | noise 0.5734 | phys 43.1525
+epoch 16 done in 0.6s | val noise-MSE 0.57335
+epoch 17 done in 0.6s | val noise-MSE 0.55564
+epoch 18 done in 0.6s | val noise-MSE 0.55219
+ep 19 step 300 | noise 0.5227 | phys 30.4385
+epoch 19 done in 0.6s | val noise-MSE 0.53366
+epoch 20 done in 0.6s | val noise-MSE 0.52374
+epoch 21 done in 0.6s | val noise-MSE 0.50894
+epoch 22 done in 0.6s | val noise-MSE 0.48863
+ep 23 step 350 | noise 0.4950 | phys 21.2906
+epoch 23 done in 0.6s | val noise-MSE 0.47710
+epoch 24 done in 0.6s | val noise-MSE 0.46798
+epoch 25 done in 0.6s | val noise-MSE 0.45233
+ep 26 step 400 | noise 0.4606 | phys 26.6327
+epoch 26 done in 0.6s | val noise-MSE 0.44219
+epoch 27 done in 0.6s | val noise-MSE 0.43966
+epoch 28 done in 0.6s | val noise-MSE 0.41615
+ep 29 step 450 | noise 0.4128 | phys 14.3463
+epoch 29 done in 0.6s | val noise-MSE 0.40488
+epoch 30 done in 0.6s | val noise-MSE 0.39198
+epoch 31 done in 0.6s | val noise-MSE 0.36932
+epoch 32 done in 0.6s | val noise-MSE 0.37074
+ep 33 step 500 | noise 0.3797 | phys 12.8906
+epoch 33 done in 0.6s | val noise-MSE 0.36135
+epoch 34 done in 0.6s | val noise-MSE 0.35718
+epoch 35 done in 0.6s | val noise-MSE 0.32439
+ep 36 step 550 | noise 0.3256 | phys 11.0510
+epoch 36 done in 0.6s | val noise-MSE 0.31728
+epoch 37 done in 0.6s | val noise-MSE 0.32583
+epoch 38 done in 0.6s | val noise-MSE 0.31551
+ep 39 step 600 | noise 0.2817 | phys 10.9445
+epoch 39 done in 0.6s | val noise-MSE 0.29988
+epoch 40 done in 0.6s | val noise-MSE 0.28621
+epoch 41 done in 0.6s | val noise-MSE 0.25778
+epoch 42 done in 0.6s | val noise-MSE 0.24400
+ep 43 step 650 | noise 0.2845 | phys 10.8623
+epoch 43 done in 0.6s | val noise-MSE 0.25783
+epoch 44 done in 0.6s | val noise-MSE 0.24471
+epoch 45 done in 0.6s | val noise-MSE 0.23197
+ep 46 step 700 | noise 0.2430 | phys 10.0657
+epoch 46 done in 0.6s | val noise-MSE 0.22060
+epoch 47 done in 0.6s | val noise-MSE 0.25187
+epoch 48 done in 0.6s | val noise-MSE 0.23323
+ep 49 step 750 | noise 0.1952 | phys 7.3879
+epoch 49 done in 0.6s | val noise-MSE 0.22150
+epoch 50 done in 0.6s | val noise-MSE 0.23024
+epoch 51 done in 0.6s | val noise-MSE 0.23369
+epoch 52 done in 0.6s | val noise-MSE 0.20138
+ep 53 step 800 | noise 0.2294 | phys 9.3086
+epoch 53 done in 0.6s | val noise-MSE 0.19883
+epoch 54 done in 0.6s | val noise-MSE 0.21885
+epoch 55 done in 0.6s | val noise-MSE 0.20037
+ep 56 step 850 | noise 0.1750 | phys 6.3526
+epoch 56 done in 0.6s | val noise-MSE 0.18079
+epoch 57 done in 0.6s | val noise-MSE 0.19524
+epoch 58 done in 0.6s | val noise-MSE 0.18459
+ep 59 step 900 | noise 0.2049 | phys 13.2523
+epoch 59 done in 0.6s | val noise-MSE 0.19288
+epoch 60 done in 0.6s | val noise-MSE 0.17799
+epoch 61 done in 0.6s | val noise-MSE 0.16768
+epoch 62 done in 0.6s | val noise-MSE 0.17748
+ep 63 step 950 | noise 0.1742 | phys 5.3162
+epoch 63 done in 0.6s | val noise-MSE 0.17448
+epoch 64 done in 0.6s | val noise-MSE 0.17913
+epoch 65 done in 0.6s | val noise-MSE 0.16697
+ep 66 step 1000 | noise 0.1464 | phys 4.8877
+epoch 66 done in 0.6s | val noise-MSE 0.15546
+epoch 67 done in 0.6s | val noise-MSE 0.16512
+epoch 68 done in 0.6s | val noise-MSE 0.15796
+ep 69 step 1050 | noise 0.2063 | phys 5.0985
+epoch 69 done in 0.6s | val noise-MSE 0.16526
+epoch 70 done in 0.6s | val noise-MSE 0.17066
+epoch 71 done in 0.6s | val noise-MSE 0.13010
+epoch 72 done in 0.6s | val noise-MSE 0.16756
+ep 73 step 1100 | noise 0.1484 | phys 5.9898
+epoch 73 done in 0.6s | val noise-MSE 0.13771
+epoch 74 done in 0.6s | val noise-MSE 0.14806
+epoch 75 done in 0.6s | val noise-MSE 0.16738
+ep 76 step 1150 | noise 0.1802 | phys 3.1362
+epoch 76 done in 0.6s | val noise-MSE 0.15155
+epoch 77 done in 0.6s | val noise-MSE 0.13922
+epoch 78 done in 0.6s | val noise-MSE 0.15932
+ep 79 step 1200 | noise 0.1016 | phys 2.4346
+epoch 79 done in 0.6s | val noise-MSE 0.12921
+epoch 80 done in 0.6s | val noise-MSE 0.14902
+epoch 81 done in 0.6s | val noise-MSE 0.12088
+epoch 82 done in 0.6s | val noise-MSE 0.12166
+ep 83 step 1250 | noise 0.1633 | phys 3.5501
+epoch 83 done in 0.6s | val noise-MSE 0.11665
+epoch 84 done in 0.6s | val noise-MSE 0.12466
+epoch 85 done in 0.6s | val noise-MSE 0.14068
+ep 86 step 1300 | noise 0.1102 | phys 4.6225
+epoch 86 done in 0.6s | val noise-MSE 0.14762
+epoch 87 done in 0.6s | val noise-MSE 0.12236
+epoch 88 done in 0.6s | val noise-MSE 0.13438
+ep 89 step 1350 | noise 0.1263 | phys 4.8017
+epoch 89 done in 0.6s | val noise-MSE 0.13198
+epoch 90 done in 0.6s | val noise-MSE 0.12432
+epoch 91 done in 0.6s | val noise-MSE 0.15481
+epoch 92 done in 0.6s | val noise-MSE 0.15468
+ep 93 step 1400 | noise 0.1322 | phys 2.7708
+epoch 93 done in 0.6s | val noise-MSE 0.12641
+epoch 94 done in 0.6s | val noise-MSE 0.12344
+epoch 95 done in 0.6s | val noise-MSE 0.13988
+ep 96 step 1450 | noise 0.1033 | phys 2.1488
+epoch 96 done in 0.6s | val noise-MSE 0.12425
+epoch 97 done in 0.6s | val noise-MSE 0.12150
+epoch 98 done in 0.6s | val noise-MSE 0.12590
+ep 99 step 1500 | noise 0.1382 | phys 2.3202
+epoch 99 done in 0.6s | val noise-MSE 0.13630
+epoch 100 done in 0.6s | val noise-MSE 0.13207
+epoch 101 done in 0.6s | val noise-MSE 0.11699
+epoch 102 done in 0.7s | val noise-MSE 0.13181
+ep 103 step 1550 | noise 0.1146 | phys 2.9889
+epoch 103 done in 0.6s | val noise-MSE 0.12503
+epoch 104 done in 0.6s | val noise-MSE 0.11627
+epoch 105 done in 0.6s | val noise-MSE 0.11696
+ep 106 step 1600 | noise 0.1046 | phys 2.1220
+epoch 106 done in 0.6s | val noise-MSE 0.13354
+epoch 107 done in 0.6s | val noise-MSE 0.09580
+epoch 108 done in 0.6s | val noise-MSE 0.12981
+ep 109 step 1650 | noise 0.0772 | phys 2.1148
+epoch 109 done in 0.6s | val noise-MSE 0.11107
+epoch 110 done in 0.6s | val noise-MSE 0.13205
+epoch 111 done in 0.6s | val noise-MSE 0.10959
+epoch 112 done in 0.6s | val noise-MSE 0.10673
+ep 113 step 1700 | noise 0.1072 | phys 2.9742
+epoch 113 done in 0.6s | val noise-MSE 0.10294
+epoch 114 done in 0.6s | val noise-MSE 0.10166
+epoch 115 done in 0.6s | val noise-MSE 0.11713
+ep 116 step 1750 | noise 0.1037 | phys 1.6739
+epoch 116 done in 0.6s | val noise-MSE 0.10547
+epoch 117 done in 0.6s | val noise-MSE 0.12583
+epoch 118 done in 0.6s | val noise-MSE 0.09934
+ep 119 step 1800 | noise 0.1070 | phys 1.9835
+epoch 119 done in 0.6s | val noise-MSE 0.09217
+epoch 120 done in 0.6s | val noise-MSE 0.11433
+epoch 121 done in 0.6s | val noise-MSE 0.13069
+epoch 122 done in 0.6s | val noise-MSE 0.10612
+ep 123 step 1850 | noise 0.0926 | phys 1.8998
+epoch 123 done in 0.6s | val noise-MSE 0.10190
+epoch 124 done in 0.6s | val noise-MSE 0.11352
+epoch 125 done in 0.6s | val noise-MSE 0.10606
+ep 126 step 1900 | noise 0.0875 | phys 3.5876
+epoch 126 done in 0.6s | val noise-MSE 0.09505
+epoch 127 done in 0.6s | val noise-MSE 0.08941
+epoch 128 done in 0.6s | val noise-MSE 0.09522
+ep 129 step 1950 | noise 0.1173 | phys 4.4049
+epoch 129 done in 0.6s | val noise-MSE 0.10122
+epoch 130 done in 0.6s | val noise-MSE 0.11143
+epoch 131 done in 0.6s | val noise-MSE 0.11422
+epoch 132 done in 0.6s | val noise-MSE 0.11713
+ep 133 step 2000 | noise 0.1091 | phys 1.3594
+epoch 133 done in 0.6s | val noise-MSE 0.09698
+epoch 134 done in 0.6s | val noise-MSE 0.10429
+epoch 135 done in 0.6s | val noise-MSE 0.10766
+ep 136 step 2050 | noise 0.0969 | phys 1.2888
+epoch 136 done in 0.6s | val noise-MSE 0.13254
+epoch 137 done in 0.7s | val noise-MSE 0.10174
+epoch 138 done in 0.6s | val noise-MSE 0.09304
+ep 139 step 2100 | noise 0.0564 | phys 1.3883
+epoch 139 done in 0.6s | val noise-MSE 0.11153
+epoch 140 done in 0.6s | val noise-MSE 0.10745
+epoch 141 done in 0.6s | val noise-MSE 0.08163
+epoch 142 done in 0.6s | val noise-MSE 0.10236
+ep 143 step 2150 | noise 0.0978 | phys 1.6735
+epoch 143 done in 0.6s | val noise-MSE 0.08652
+epoch 144 done in 0.6s | val noise-MSE 0.09576
+epoch 145 done in 0.7s | val noise-MSE 0.11622
+ep 146 step 2200 | noise 0.0836 | phys 2.3621
+epoch 146 done in 0.6s | val noise-MSE 0.08569
+epoch 147 done in 0.6s | val noise-MSE 0.09002
+epoch 148 done in 0.6s | val noise-MSE 0.09650
+ep 149 step 2250 | noise 0.0779 | phys 1.5292
+epoch 149 done in 0.6s | val noise-MSE 0.09623
+training complete. best val 0.08163. checkpoints in outputs/checkpoints

@@ -14,10 +14,10 @@ import torch
 from src.constants import (
     A_MAX,
     BALL_IDX,
-    COURT_LENGTH_HALF,
     COURT_WIDTH,
     N_PLAYERS,
     R_MIN,
+    RIM_FRAME_MIDCOURT_X,
     V_MAX_PLAYER,
 )
 
@@ -72,13 +72,15 @@ def overlap_penalty(traj: torch.Tensor, r_min: float = R_MIN, reduce: str = "mea
 def court_bounds_penalty(traj: torch.Tensor, reduce: str = "mean") -> torch.Tensor:
     """Hinge on positions outside the half-court rectangle (normalized by tol).
 
-    Rim-centric frame: x in (-1.0, COURT_LENGTH_HALF), y in (-W/2, W/2).
-    Tolerance of 1.0 m so out-of-bounds plays aren't over-penalized.
+    Rim-centric frame: x' in [RIM_FRAME_MIDCOURT_X, +0.5] (the offense occupies
+    negative x'; a small positive margin past the rim is tolerated),
+    y' in [-W/2, W/2]. Tolerance 1.0 m so marginal excursions aren't
+    over-penalized.
     """
     xy = traj[..., :2]
     tol = 1.0
-    lo_x = torch.relu(-(xy[..., 0]) - tol)   # x < -1 m (behind rim) penalized
-    hi_x = torch.relu(xy[..., 0] - COURT_LENGTH_HALF - tol)
+    lo_x = torch.relu((RIM_FRAME_MIDCOURT_X - tol) - xy[..., 0])  # behind midcourt
+    hi_x = torch.relu(xy[..., 0] - 0.5 - tol)                     # past the rim side
     lo_y = torch.relu(-(xy[..., 1] + COURT_WIDTH / 2) - tol)
     hi_y = torch.relu(xy[..., 1] - COURT_WIDTH / 2 - tol)
     return _reduce((lo_x.pow(2) + hi_x.pow(2) + lo_y.pow(2) + hi_y.pow(2)) / tol**2, reduce)

@@ -21,6 +21,11 @@ FT_LINE_X = 5.8              # free-throw line distance from baseline/rim origin
 PAINT_WIDTH = 4.88           # 16 ft lane width (m)
 PAINT_LENGTH = 5.79          # 19 ft from baseline (m)
 
+# Rim-frame x-locations: the rim is at the origin and the offense occupies
+# x' <= 0 (advancing toward the rim as x' -> 0-).
+RIM_FRAME_BASELINE_X = -(5.25 * 0.3048)         # baseline: -1.60 m
+RIM_FRAME_MIDCOURT_X = -(47.0 - 5.25) * 0.3048  # half-court line: -12.74 m
+
 # ---------------------------------------------------------------------------
 # Agents & features
 # ---------------------------------------------------------------------------
