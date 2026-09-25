@@ -147,7 +147,37 @@ recipe, which the notebook demonstrates).
 | Session dies mid-training | Colab idle timeout | Keep the tab open; checkpoints save every epoch (`last.pt`), so training resumes by rerunning Cell 6. |
 | `torch` version conflict | torch was reinstalled | Never `pip install torch` on Colab; use `requirements-colab.txt` only. |
 
-## 6. Expected outputs
+## 6. Getting results back for the paper
+
+Run **cell 10.5** at the end of the notebook: it zips the paper-bound
+artifacts and triggers your browser's download:
+
+```
+colab_artifacts.zip
+├── outputs/eval/report.json              # FTD / ADE / compliance / EPV contrasts
+├── outputs/counterfactuals/              # scheme_*.npy + scheme_*.mp4 renders
+├── outputs/processed_tensors/norm_stats.npz
+├── ingest_log.txt                        # funnel counts (events→runs→windows→labels)
+└── train_log.txt                         # per-epoch loss curve
+```
+
+Unzip it **into the local project folder** (the `nba-proj` directory),
+preserving the `outputs/...` structure:
+
+```
+nba-proj/
+└── outputs/                 # <- merge this with the existing outputs/
+    ├── eval/report.json
+    ├── counterfactuals/
+    └── ...
+```
+
+Then ask your agent to "update the paper with the Colab run" — the paper's
+results tables (`paper/main.tex`, Tables 1–2) are regenerated from
+`report.json` + the branch statistics, and the ingestion funnel numbers in
+Appendix B come from `ingest_log.txt`.
+
+## 7. Expected outputs
 
 ```
 outputs/
