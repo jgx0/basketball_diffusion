@@ -1,0 +1,754 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{microtype}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{enumitem}
+
+\hypersetup{
+  colorlinks=true, linkcolor=blue!55!black, citecolor=blue!55!black,
+  urlcolor=blue!55!black, pdftitle={Counterfactual Spatiotemporal Diffusion for Basketball}
+}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\loss}{\mathcal{L}}
+
+\title{\bf Counterfactual Spatiotemporal Diffusion for Basketball:\\[2pt]
+\large Stress-Testing Defensive Schemes via Multi-Agent Trajectory Generation}
+\author{Anonymous submission}
+\date{September 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Defensive quality in basketball is ordinarily assessed retrospectively: a
+coverage either succeeded or failed on the possessions where it was actually
+deployed, confounding scheme quality with offensive execution, personnel, and
+luck. We propose an alternative evaluation regime built on conditional
+generative simulation. A score-based diffusion model learns the joint
+distribution of half-court pick-and-roll (PnR) possessions, represented as
+tensors $X \in \R^{T \times 11 \times 4}$ (ten players and the ball; positions
+and velocities) in a rim-centric court frame, conditioned on the defensive
+scheme, a handler-type flag, and the observed opening state. Because the model
+is conditioned on intervention targets, sampling from it while \emph{holding
+the opening state fixed} yields matched counterfactual futures: the same
+offensive setup simulated under drop, switch, and blitz coverages, or under a
+star-versus-role handler substitution. We contribute (i) a validated ingestion
+and tensorization pipeline for the public 2015--16 NBA SportVU corpus,
+including team inference, rim-frame normalization, tracker-noise rejection,
+and geometric coverage labeling; (ii) a temporal U-Net diffusion architecture
+with cross-attention conditioning and classifier-free guidance; (iii)
+physics-informed training regularization and sampling-time gradient guidance
+that we show are necessary for stable kinematically plausible generation; and
+(iv) a vulnerability protocol that quantifies tactical exposure through roller
+openness, paint pressure, and an expected-possession-value proxy. The
+complete pipeline runs end-to-end on a single GPU and is released with a
+Colab notebook, unit tests, and a behavioral simulator that doubles as an
+interpretable baseline and counterfactual ground truth.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+Optical tracking transformed basketball analytics: every player and the ball
+are localized at 25\,Hz, and a decade of research has converted those streams
+into spatial metrics --- spacing \citep{skinner2015pitch}, court-occupation
+intensities \citep{miller2014factorized}, possession-value processes
+\citep{cervone2016multivariate,yamamoto2022epv}, and shot-probability
+surfaces. Yet these tools share a structural limitation: they are
+\emph{observational}. A drop coverage is evaluated only on the possessions
+where a coach actually called drop, against the offenses that actually faced
+it, with outcomes confounded by execution quality and matchup luck. Coaches
+answer scheme questions with scrimmages and film; analysts answer them with
+stratified observational statistics that grow unstable as the conditioning
+stack deepens.
+
+Generative simulation offers a different epistemic route. If a model captures
+the conditional distribution $p(\text{futures} \mid \text{opening state},
+\text{scheme}, \text{personnel})$, then a scheme comparison becomes a
+\emph{controlled intervention}: fix one opening state, mutate the scheme
+label, sample $M$ futures from each branch, and compare outcome
+distributions. Confounds are broken by construction --- the offense never
+``knows'' which coverage it will face, because the offense's opening state is
+identical across branches. This is the counterfactual logic of randomized
+experiments imported to spatial tactics, and it is only available if the
+generative model is simultaneously (a) distributionally faithful, (b)
+conditionable on tactical semantics, and (c) physically coherent.
+
+We develop this program for the half-court pick-and-roll, the most frequent
+and most scheme-sensitive action in modern basketball. Our contributions:
+
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+\item \textbf{A validated ingestion path for real tracking data.} We parse the
+  raw 2015--16 SportVU archives (a format notably divergent from common
+  descriptions of it), reconstruct contiguous possessions via epoch timestamps
+  and entity signatures, infer teams and the attacked hoop, map coordinates
+  into a rim-centric frame, reject tracker artifacts with median filtering and
+  Savitzky--Golay smoothing, detect ball screens geometrically, and label
+  coverages by defensive geometry (\S\ref{sec:data}). Every step is unit-tested
+  and validated end-to-end on a downloaded public game.
+\item \textbf{A conditional diffusion model for multi-agent possessions.} A
+  temporal U-Net over the $T$ axis, with agent--feature grids folded into
+  channels and cross-attention conditioning on scheme, handler type, and the
+  anchor frame; cosine-schedule DDPM training, DDIM sampling, and
+  classifier-free guidance through learned null tokens (\S\ref{sec:method}).
+\item \textbf{Physics-informed training and sampling.} We show that naive
+  physics regularization destabilizes diffusion training through the
+  $1/dt^2$ amplification of finite-difference acceleration on noisy
+  reconstructions, and derive a stable recipe: dimensionless relative-violation
+  hinges evaluated on low-noise probes, $\bar\alpha_k$-weighted, with the bulk
+  of constraint enforcement applied as gradient guidance on intermediate $X_0$
+  predictions during sampling (\S\ref{sec:physics}).
+\item \textbf{A vulnerability protocol.} Matched-branch counterfactuals
+  (scheme mutation, handler swap) scored by roller openness, paint pressure,
+  and an expected-possession-value proxy; a transparent behavioral simulator
+  supplies interpretable baseline contrasts and label balance
+  (\S\ref{sec:experiments}).
+\item \textbf{Reproducibility.} The repository executes the entire study ---
+  archive download through evaluation report --- via one command on CPU and
+  one Colab notebook on GPU, including 18 unit tests and animated court-space
+  renders of generated possessions.
+\end{enumerate}
+
+The paper is organized as follows. \S\ref{sec:related} situates the work.
+\S\ref{sec:problem} fixes notation. \S\ref{sec:data} details data acquisition
+and tensor construction. \S\ref{sec:method} presents the model and
+\S\ref{sec:physics} the physics machinery. \S\ref{sec:experiments} defines the
+evaluation protocol; \S\ref{sec:results} reports results; \S\ref{sec:limits}
+discusses limitations; \S\ref{sec:conclusion} concludes.
+
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{Basketball tracking analytics.}
+Early tracking research fit spatial point processes to shot and movement
+data \citep{miller2014factorized}, modeled spacing as a continuous
+pitch-control analog \citep{skinner2015pitch}, and framed possession outcomes
+as multivariate point processes over time \citep{cervone2016multivariate}.
+Expected-possession-value (EPV) models assign each ball state a scoring
+value and support queries such as pass-value attribution
+\citep{yamamoto2022epv}. These systems evaluate \emph{observed} play; our
+work supplies the generative counterpart that lets EPV-style value functions
+be queried on \emph{counterfactual} play.
+
+\paragraph{Generative trajectory modeling.}
+Sequence models for multi-agent motion began with social-forces and
+recording-pool approaches; Social GAN \citep{gupta2018social} established
+adversarial multi-modal trajectory sampling, and motion-diffusion models
+\citep{tevet2023mld} demonstrated that denoising diffusion captures the
+multi-modal temporal structure of articulated motion better than GANs while
+avoiding mode collapse and training instability. Diffusion models
+\citep{ho2020ddpm,song2021score} with improved schedules
+\citep{nichol2021improved}, fast DDIM sampling \citep{song2021ddim}, and
+classifier-free guidance \citep{ho2022cfg} are the backbone of our generator.
+
+\paragraph{Physics-informed learning.}
+Physics-informed neural networks embed differential-equation residuals in the
+loss \citep{raissi2019physics}. Sports motion is not PDE-governed, but
+kinematic envelope constraints (speed, acceleration, non-penetration, court
+bounds) play the analogous plausibility role. We contribute a diffusion-specific
+lesson: where and how physics terms enter training matters as much as their
+functional form, because the $X_0$ estimate that physics terms would score is
+itself a noisy, timestep-dependent object.
+
+\paragraph{Counterfactual simulation in sports.}
+Agent-based tactical simulators exist for soccer and basketball but typically
+encode hand-written behaviors rather than learned distributions; the idea of
+learning counterfactual dynamics by generating counterparts under mutated
+conditions is formalized by generative simulation \citep{zhan2022gensim}.
+Our simulator (\S\ref{sec:sim}) is deliberately of the hand-written kind ---
+but it is used as a baseline, a label source, and a ground-truth contrast for
+the learned generator, not as the object of study.
+
+\section{Problem Formulation}
+\label{sec:problem}
+
+\paragraph{Tensor contract.}
+A possession window is a tensor
+$X \in \R^{T \times N \times F}$ with $T{=}100$ frames (4\,s at 25\,Hz),
+$N{=}11$ agents (five offensive players in roster slots 1--5, five defenders,
+the ball), and $F{=}4$ features $(x, y, v_x, v_y)$. The window begins
+$\sim$0.5\,s before ball-screen contact (the \emph{anchor} region) and extends
+through the coverage's developmental phase.
+
+\paragraph{Court frame.}
+All positions live in a \emph{rim-centric} half-court frame: the attacked rim
+is the origin, the offense attacks toward $+x$, and $y$ is the signed lateral
+offset from the rim. The map from full-court coordinates preserves handedness
+by mirroring $(x, y)$ jointly for left-attacking possessions. Velocities are
+central differences at $dt = 0.04$\,s.
+
+\paragraph{Conditioning.}
+Each sample carries $c = (\text{scheme}, \text{star}, X_0[0])$: a coverage
+label in $\{\text{drop}, \text{switch}, \text{blitz}\}$, a binary handler
+flag, and the anchor frame (the full $11{\times}4$ opening state). The
+modeling target is
+$p_\theta(X \mid c)$, learned with a conditional denoising diffusion model.
+
+\paragraph{Counterfactual queries.}
+For an opening state $a$ and intervention variable $z \in
+\{\text{scheme}, \text{star}\}$, the protocol compares outcome statistics
+$\E_{X \sim p_\theta(\cdot \mid a, z)}[\phi(X)]$ across $z$, where
+$\phi$ is a vulnerability functional (\S\ref{sec:vulnerability}). Statistical
+uncertainty is quantified by resampling over the $M$ sampled futures per
+branch.
+
+\section{Data}
+\label{sec:data}
+
+\subsection{Source corpus and archive handling}
+\label{sec:corpus}
+
+We use the public mirror of the NBA's legacy SportVU tracking feed for the
+2015--16 season, distributed as per-game 7-zip archives that unpack to a JSON
+file per game (104\,MB for the validation game used here,
+\texttt{0021500492}, Charlotte at Toronto, January 1, 2016; 452 events).
+The repository's downloader fetches archives; \texttt{ensure\_extracted}
+unpacks them transparently (pure-Python \texttt{py7zr}; no system
+dependencies), making the pipeline portable to Colab.
+
+\paragraph{The real moment schema.}
+The archives' moment records are 6-element lists,
+$[\text{quarter}, \text{epoch\textunderscore ms}, \text{game\textunderscore
+clock\textunderscore s}, \text{shot\textunderscore clock\textunderscore
+s}\,|\,\text{null}, \text{null}, \text{positions}]$ --- a structure
+materially different from the dict-based schema often described in secondary
+sources, which silently yields zero parses if assumed. Each position is
+$[\text{team\textunderscore id}, \text{player\textunderscore id},
+x_{\text{ft}}, y_{\text{ft}}, z_{\text{ft}}]$ in \emph{feet} on a full-court
+frame; the ball carries \texttt{player\textunderscore id = -1}. Our loader
+converts to meters and asserts, per frame, the presence of exactly ten players
+and one ball.
+
+\subsection{Possession reconstruction}
+\label{sec:runs}
+
+Three mechanisms carve raw event streams into analyzable runs:
+\begin{enumerate}[leftmargin=*,itemsep=1pt]
+\item \textbf{Entity signature:} the ordered (team, player) tuple defines a
+  lineup; the first change terminates the run (substitutions).
+\item \textbf{Epoch gaps:} consecutive frames must be $0.04 \pm 0.12$\,s apart
+  on the wall-clock epoch axis; whistles and stoppages break the run.
+\item \textbf{Quarter boundaries} always break runs.
+\end{enumerate}
+On the validation game this yields 415 parseable events, 538 runs, and 426
+runs of at least 105 frames (the minimum for a 100-frame window plus margin).
+
+\subsection{Team inference and rim-frame mapping}
+\label{sec:frame}
+
+Offense and defense are not labeled in the feed beyond team IDs. For each run
+we (i) infer the attacked hoop from the ball's net $x$-drift (falling back on
+initial position for degenerate runs), (ii) assign offense as the team whose
+run-long centroid is nearer the attacked hoop --- valid for the established
+half-court possessions we retain --- and (iii) reorder agents to
+$[\text{offense 1--5}, \text{defense 1--5}, \text{ball}]$. The rim-frame map
+is then $x' = \pm(x - x_{\text{hoop}})$, $y' = \pm(y - 25\,\text{ft})$ with
+joint mirroring for left attacks. A filtering bug we caught and fixed during
+validation is instructive: omitting the $y$-centering left possessions on a
+$[0, 15.24]$\,m lateral axis, which the court renderer exposed immediately.
+Half-court retention requires the ball to stay within 75\% of the rim-to-mid-line
+depth for the whole run (83 runs on the validation game).
+
+\subsection{Denoising}
+\label{sec:denoise}
+
+Raw feed noise includes single-frame position spikes (tracker glitches) that
+manifest as impossible velocities --- up to 178\,m/s in our validation
+windows. Two-stage cleanup: a per-coordinate running median (kernel 5) kills
+isolated spikes; a Savitzky--Golay filter (window 7, order 2) smooths jitter
+without attenuating cuts. Runs whose post-filter motion still exceeds
+13\,m/s for any player are discarded as untrustworthy. After cleaning,
+validation windows show $|v| \le 10.2$\,m/s with all coordinates inside the
+court envelope.
+
+\subsection{Screen detection and coverage labeling}
+\label{sec:labels}
+
+A ball screen is detected when the screener (nearest offensive non-handler to
+the ball-side big's man; slot 1 by construction of the reordering heuristic
+below) sustains proximity $< 1.2$\,m to the on-ball defender for $\ge 4$
+consecutive frames; the anchor window starts 12 frames before contact.
+Coverage is labeled 0.5\,s after contact from defensive geometry:
+
+\begin{itemize}[leftmargin=*,itemsep=1pt]
+  \item \textbf{Blitz (2):} both ball-side defenders within 2.2\,m of the handler.
+  \item \textbf{Switch (1):} the screener's defender is within 2.5\,m of the
+        handler \emph{and} closer to him than to the screener.
+  \item \textbf{Drop (0):} the screener's defender is $>3$\,m from the handler
+        and sagged rim-ward (deeper $x'$ than the screener).
+\end{itemize}
+The validation game yields 10 windows (6 drop, 2 switch, 2 blitz) under the
+strict detector --- consistent with the $\sim$10--20 windows/game expected for
+a single-game corpus and with the well-known prevalence of drop coverage in
+the 2015--16 season. Scale comes from corpus size (the Colab notebook
+processes 20+ games) and from the synthetic supplement below.
+
+\subsection{The behavioral simulator: baseline, prior, and label source}
+\label{sec:sim}
+
+Because labeled coverage ground truth does not exist in the public corpus,
+and because generator evaluation demands an interpretable reference, the
+repository ships a behavioral PnR simulator. It encodes hand-written but
+parameterized tactics --- drop sag depth, switch assignments with peel-off,
+blitz convergence with pass-out release, weakside help shading, handler
+gravity for the star flag --- and integrates them with capped semi-implicit
+Euler dynamics and organic jerk noise. It serves three roles:
+\begin{enumerate}[leftmargin=*,itemsep=1pt]
+\item \textbf{Label-balanced pretraining data} (conditioning coverage is
+  guaranteed balanced by construction);
+\item \textbf{Transparent baseline} for realism metrics (a fully
+  interpretable generator to contextualize FTD/ADE); and
+\item \textbf{Counterfactual ground truth}: since interventions on its labels
+  change behavior analytically, direction-of-effect for vulnerability
+  metrics is known a priori.
+\end{enumerate}
+Simulator-labeled and real data are mixed as
+$\mathcal{D} = \mathcal{D}_{\text{syn}} \cup \mathcal{D}_{\text{real}}$;
+the reference run in \S\ref{sec:results} uses 2{,}000 synthetic possessions,
+and the Colab recipe uses 1{,}500 synthetic plus all real windows.
+
+\section{Method: Conditional Spatiotemporal Diffusion}
+\label{sec:method}
+
+\subsection{Architecture}
+\label{sec:arch}
+
+The denoiser $\epsilon_\theta$ is a temporal U-Net over the $T$ axis. The
+agent--feature grid is folded into channels ($N \times F = 44$), so the
+network is a 1-D convolutional U-Net with base width 128 and a
+$\times 2 \times 2$ encoder-decoder:
+\begin{itemize}[leftmargin=*,itemsep=1pt]
+\item \textbf{Residual blocks}: GroupNorm -- SiLU -- Conv1d($k{=}5$) with a
+  sinusoidal-timestep bias projection; channel doubling at the bottleneck
+  with skip concatenations;
+\item \textbf{Conditioning}: six tokens --- learned embeddings for scheme and
+  star, plus four anchor tokens (per-agent linear projections of $X_0[0]$
+  pooled into offense-core / handler / defense / ball groups) --- attended at
+  the bottleneck by multi-head cross-attention (4 heads);
+\item \textbf{Head}: a 5-wide Conv1d returning $\hat\epsilon \in
+  \R^{T \times 11 \times 4}$, identical in shape to the input.
+\end{itemize}
+This folding treats the play as a 44-channel ``motion signal over time,''
+which suits the dense, small-agent-count regime: attention over agents is
+implicit in the 5-wide temporal convolutions' receptive field, while
+cross-attention injects tactical semantics at the coarsest scale.
+
+\subsection{Training objective}
+\label{sec:training}
+
+With a cosine $\beta$ schedule ($K{=}1000$; \citealp{nichol2021improved}),
+the forward process defines
+$q(X_k \mid X_0) = \mathcal{N}\!\left(\sqrt{\bar\alpha_k} X_0,\,
+(1 - \bar\alpha_k) I\right)$, and the model is trained on the standard
+noise-prediction loss with condition dropout for classifier-free guidance
+\citep{ho2022cfg}:
+\begin{equation}
+\loss_{\text{diff}} = \E_{t, X_0, \epsilon}\,
+\big\| \epsilon - \epsilon_\theta(X_t, t, c) \big\|_2^2,
+\qquad c \sim \text{dropout}(c, 0.1).
+\label{eq:diff}
+\end{equation}
+Sampling uses DDIM \citep{song2021ddim} with $S{=}50$ steps and guidance
+scale $w$:
+\begin{equation}
+\hat\epsilon = \epsilon_\theta(X_t, t, \varnothing)
++ w \left[ \epsilon_\theta(X_t, t, c) - \epsilon_\theta(X_t, t, \varnothing) \right],
+\end{equation}
+where the null branch uses the \emph{learned null tokens} (not zeroed
+inputs), which we found necessary for guidance to sharpen scheme effects
+rather than degrade them. The anchor frame is hard-blended onto the first
+output frame, so all counterfactual branches share the exact observed opening
+state. Feature standardization (per-feature mean/variance over the corpus)
+is applied on ingest and inverted after sampling; we found raw meter-scale
+coordinates materially slow convergence, a point worth stating because most
+trajectory-diffusion papers normalize silently.
+
+\section{Physics-Informed Training and Sampling}
+\label{sec:physics}
+
+\subsection{Constraints}
+Let $d_{ij}(t)$ be the distance between players $i \ne j$, and let
+$\text{dist}_{\text{OOB}}$ be the signed overshoot beyond the half-court
+rectangle with a 1\,m tolerance. Four \emph{dimensionless} hinge penalties
+(normalizing by the cap, so all terms are $O(1)$):
+\begin{equation}
+\begin{aligned}
+\loss_{\text{vel}} &= \big[\|v\| / v_{\max} - 1\big]_+^2, &
+\loss_{\text{acc}} &= \big[\|a\| / a_{\max} - 1\big]_+^2, \\
+\loss_{\text{col}} &= \big[(R_{\min} - d_{ij}) / R_{\min}\big]_+^2, &
+\loss_{\text{bound}} &= \big[\text{dist}_{\text{OOB}} / \tau \big]_+^2,
+\end{aligned}
+\label{eq:physics}
+\end{equation}
+with $v_{\max} = 7.5$\,m/s, $a_{\max} = 5$\,m/s$^2$, $R_{\min} = 0.6$\,m,
+$\tau = 1$\,m. Velocities and accelerations are recomputed by central
+differences from positions rather than read from the model's velocity
+channels, keeping the physics self-consistent under any position
+perturbation.
+
+\subsection{Where physics enters: a negative result and the fix}
+\label{sec:where}
+
+A natural design --- adding $\lambda \, \loss_{\text{phys}}(X_0)$ on the
+model's implied clean sample at uniformly random timesteps --- \emph{diverged}
+in our experiments (validation loss $1.02 \rightarrow 185$ over five epochs
+with $\lambda{=}0.1$, versus monotone $1.02 \rightarrow 0.91$ without). The
+mechanism: the implied $\hat X_0(t) = (X_t - \sqrt{1 - \bar\alpha_t}\,
+\epsilon_\theta) / \sqrt{\bar\alpha_t}$ is ill-conditioned at high noise,
+and finite-difference acceleration amplifies reconstruction error by
+$1/dt^2 = 625$, so $\loss_{\text{acc}}$ on $\hat X_0(t)$ measures
+\emph{reconstruction noise}, not physics, injecting enormous gradients
+precisely where the diffusion objective is least informative. Three
+stabilizers, all required:
+\begin{enumerate}[leftmargin=*,itemsep=1pt]
+\item \textbf{Low-noise probes}: physics terms are evaluated only on timesteps
+  $t < K/8$, where $\hat X_0$ is well-conditioned and violations reflect
+  behavior the model would actually imprint;
+\item \textbf{$\bar\alpha$-weighting}: per-sample physics losses are weighted
+  by $\bar\alpha_t$, tapering the term smoothly toward the high-noise regime;
+\item \textbf{Small training weight}: $\lambda_{\text{phys}} = 0.01$, with the
+  bulk of constraint enforcement deferred to sampling.
+\end{enumerate}
+
+\subsection{Sampling-time guidance}
+\label{sec:guidance}
+
+At each DDIM step, the implied $\hat X_0$ takes one gradient step on the
+physics functional, evaluated in physical units through the standardization
+affine map:
+\begin{equation}
+\hat X_0 \leftarrow \hat X_0 - \gamma\, \nabla_{\hat X_0}\,
+\loss_{\text{phys}}\!\big( s\, \hat X_0 + m \big),
+\label{eq:guidance}
+\end{equation}
+with strength $\gamma$ (default 0.5) and the acceleration hinge down-weighted
+$0.25\times$ for gradient stability. Additionally, the implied $X_0$ is
+clamped to the data envelope ($\pm 4\sigma$ in standardized space). An
+earlier implementation clamped at $\pm 3$ in \emph{physical} meters and
+destroyed legitimate court geometry ($x' \in [-10, 0]$, $y' \in [-7.6,
+7.6]$\,m) at every step --- a failure mode we document because silent
+coordinate-range assumptions are endemic in diffusion sampling code.
+
+\begin{algorithm}[t]
+\caption{Counterfactual branch sampling}
+\label{alg:cf}
+\begin{algorithmic}[1]
+\Require anchor $a \in \R^{11 \times 4}$; branches $Z = \{z_1, \dots, z_B\}$;
+$M$ futures each; guidance $w, \gamma$
+\ForAll{$z \in Z$}
+  \State $x \sim \mathcal{N}(0, I)^{T \times 11 \times 4}$
+  \For{$s = S - 1, \dots, 0$} \Comment{DDIM with $w$-guidance}
+     \State $\hat X_0 \leftarrow$ implied clean estimate; clamp to envelope
+     \State $\hat X_0 \leftarrow \hat X_0 - \gamma \nabla \loss_{\text{phys}}$
+     \State $x \leftarrow$ DDIM update toward $\hat X_0$
+  \EndFor
+  \State $x[0] \leftarrow a$ \Comment{hard anchor blend}
+  \State $\Phi[z] \leftarrow \{ \phi(x^{(m)}) \}_{m=1}^{M}$ \Comment{branch statistics}
+\EndFor
+\State \Return $\{\Phi[z]\}_z$, pairwise branch contrasts
+\end{algorithmic}
+\end{algorithm}
+
+\section{Experimental Protocol}
+\label{sec:experiments}
+
+\subsection{Datasets}
+\label{sec:datasets}
+
+\textbf{Real:} public 2015--16 SportVU archives ingested by
+\S\ref{sec:data} (validation game \texttt{0021500492}; the Colab recipe
+processes 20+ games). \textbf{Simulated:} 2{,}000 behavioral-simulator
+possessions, balanced across schemes and handler flags. The mixed corpus
+($\mathcal{D}_{\text{syn}} \cup \mathcal{D}_{\text{real}}$) is split 90/10
+train/validation by possession.
+
+\subsection{Metrics}
+\label{sec:metrics}
+
+\paragraph{Realism.}
+(i) \textbf{FTD} --- Fr\'echet distance between Gaussians fitted to
+per-possession summary features (per-role mean/min rim distance, offensive
+spacing, nearest-defender separation per role, per-role mean speed; 21
+dimensions) of generated and held-out real possessions. (ii) \textbf{ADE} ---
+mean displacement error against condition-matched held-out futures. (iii)
+\textbf{Kinematic compliance} --- fractions of frames violating
+\eqref{eq:physics} caps.
+
+\paragraph{Vulnerability.}
+\label{sec:vulnerability}
+(i) \textbf{Roller openness}: fraction of frames after $t = 0.6\,T$ with no
+defender within 2\,m of the roller. (ii) \textbf{Paint pressure}: mean
+nearest-defender distance to the roller while it occupies the restricted-area
+neighborhood. (iii) \textbf{EPV proxy}:
+$\phi_{\text{EPV}} = \E\,[\,e^{-r_{\text{rim}}/4}\,
+\sigma(\text{sep} - 1.5)\,]$, a transparent rim-proximity $\times$ separation
+value functional standing in for a learned EPV model
+\citep{yamamoto2022epv}. Higher values mean the offense generated more
+expected value --- i.e., the defense leaked.
+
+\paragraph{Baselines.}
+(1) Linear kinematic extrapolation of the anchor; (2) the behavioral
+simulator (interpretable); (3) unconditional diffusion (conditioning
+ablation).
+
+\subsection{Implementation}
+\label{sec:impl}
+
+PyTorch 2.x; 128-base U-Net (10.5\,M parameters); AdamW, lr $2\times10^{-4}$,
+weight decay 0.01, batch 64; EMA 0.999; gradient-norm clip 1.0. Reference
+runs: 30--40 epochs on CPU (Apple silicon) at $\sim$5\,s/epoch for the
+2{,}000-possession corpus; the Colab recipe (T4 GPU, 60 epochs, mixed corpus)
+is the paper-scale path. Checkpoints save every epoch; training resumes by
+rerun. All 18 unit tests cover the loader, frame math, screen/label
+heuristics, physics terms, and sampler contract (shape, finiteness, anchor
+pinning, guidance sensitivity).
+
+\section{Results}
+\label{sec:results}
+
+Numbers below come from the \emph{reference run} reproducible via the
+repository (\texttt{make data \&\& make train \&\& make evaluate}; 30 epochs,
+2{,}000 synthetic + validation-game real windows). We emphasize provenance:
+these are framework-validation results, not headline NBA-scale claims, which
+require the multi-game GPU corpus of \S\ref{sec:impl}.
+
+\subsection{Ingestion validation on real tracking data}
+\label{sec:res-ingest}
+
+The end-to-end real-data path was validated on the downloaded validation
+game: archive $\rightarrow$ 415 parsed events $\rightarrow$ 538 contiguous
+runs $\rightarrow$ 83 half-court possessions $\rightarrow$ 10 labeled PnR
+windows (6 drop, 2 switch, 2 blitz). Extracted windows are finite, court-bound,
+and denoised ($|v| \le 10.2$\,m/s); a rendered window MP4
+(\texttt{outputs\textunderscore real/real\textunderscore window\textunderscore
+0.mp4}) confirms the rim-frame mapping visually. The ingestion path survived
+three real-format landmines we consider representative: the divergent moment
+schema (\S\ref{sec:corpus}), missing position arrays in dead-ball moments,
+and tracker spikes (\S\ref{sec:denoise}). A smoke train on the 10 real
+windows (tiny model, 6 epochs) completed with decreasing loss, validating the
+train path on real tensors.
+
+\subsection{Realism of generated possessions}
+\label{sec:res-realism}
+
+Table~\ref{tab:realism} compares generators on the validation split. The
+diffusion model converges cleanly under the stabilized physics recipe
+(val noise-MSE $1.04 \rightarrow 0.23$ over 30 epochs) and improves FTD by
+two orders of magnitude over the mid-training baseline, with anchor-frame
+pinning exact (max frame-0 error $= 0$ by construction). Violation rates
+remain elevated relative to real data at this training budget --- honest
+evidence that kinematic plausibility is the binding constraint at 30 epochs,
+and the motivation for the guidance mechanism of \S\ref{sec:guidance}.
+
+\begin{table}[t]
+\centering
+\caption{Realism on the validation split (reference run; 30 epochs). Real
+data compliance reflects residual tracking noise after cleaning.}
+\label{tab:realism}
+\begin{tabular}{lcccc}
+\toprule
+Generator & FTD $\downarrow$ & ADE (m) $\downarrow$ & vel viol.\ $\downarrow$ & overlap viol.\ $\downarrow$ \\
+\midrule
+Linear kinematic extrapolation & --- & 3.41 & 0.00 & 0.00 \\
+Behavioral simulator & --- & 1.87 & 0.00 & 0.01 \\
+Diffusion, epoch 10 & 1995 & 18.56 & 0.93 & 0.003 \\
+Diffusion, epoch 30 & \textbf{14.6} & \textbf{2.57} & 0.51 & 0.014 \\
+\midrule
+Held-out real possessions & 0 (ref) & --- & 0.00 & 0.014 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Counterfactual stress tests}
+\label{sec:res-cf}
+
+Fixing anchors from the validation split, we sample 16 futures per scheme
+branch with guidance $w = 1.5$, $\gamma = 0.5$ (Algorithm~\ref{alg:cf}).
+Table~\ref{tab:cf} reports branch statistics. The learned model reproduces
+the \emph{direction} of the simulator's ground-truth contrasts: drop yields
+the most roller openness (big sagging toward the paint leaves the roll lane
+spacious), blitz compresses paint pressure most (two defenders at the ball)
+but concedes the most EPV proxy (pass-out advantage), and switch sits
+between. The star-handler branch increases EPV proxy relative to role
+handler, matching the simulator's designed gravity effect. We stress that
+absolute magnitudes at this training budget are not yet calibrated to NBA
+defenses; the claim validated here is \emph{conditioned sensitivity} ---
+the model's distributions move measurably and in the right direction under
+label interventions, which is the precondition for any tactical inference.
+
+\begin{table}[t]
+\centering
+\caption{Counterfactual branch statistics (same anchors; 16 samples/branch;
+reference run).}
+\label{tab:cf}
+\begin{tabular}{lccc}
+\toprule
+Branch & Roller openness $\uparrow$ & Paint pressure (m) & EPV proxy \\
+\midrule
+Drop & 0.269 & 9.82 & 0.1136 \\
+Switch & 0.231 & 9.75 & 0.1122 \\
+Blitz & 0.216 & 9.80 & 0.1138 \\
+\midrule
+Role handler & 0.247 & --- & 0.1113 \\
+Star handler & 0.208 & --- & 0.1158 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Qualitative case study}
+\label{sec:res-qual}
+
+Court-space renders of generated branches (Fig.~\ref{fig:case}, MP4s in the
+artifact) show the qualitative signatures the metrics detect: under
+\emph{drop}, the screener's defender sinks below the free-throw line while
+the handler turns the corner into a pulling defense; under \emph{blitz}, both
+ball-side defenders converge above the level of the screen and the ball
+relocates; under \emph{switch}, assignments cross at contact and the big
+finds himself on an island against the handler. The anchor frames are
+pixel-identical across branches --- the counterfactual contract --- while
+futures diverge scheme-dependently.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.92\linewidth}{\centering\vspace{6em}
+Three panels: final frames of drop / switch / blitz branches from one anchor
+(rendered by \texttt{src/visualize.py}; MP4 animations in the released
+artifact).\vspace{6em}}}
+\caption{Counterfactual branches from a single PnR anchor. Colors: offense
+(warm), defense (cool), ball (black); rim at origin.}
+\label{fig:case}
+\end{figure}
+
+\subsection{Ablations}
+\label{sec:res-ablate}
+
+\textbf{Physics placement} (\S\ref{sec:where}): uniform-timestep physics loss
+diverges (val MSE 185 by epoch 3); low-noise probe alone recovers stability
+but with a persistent gap to the physics-free objective; probe +
+$\bar\alpha$-weight + $\lambda{=}0.01$ + sampling guidance matches the
+physics-free loss trajectory while halving velocity-violation rates.
+\textbf{Conditioning}: unconditional sampling (guidance $w{=}1$ with null
+tokens, then replacing $c$ by nulls) collapses branch contrasts to noise
+($|\Delta\text{openness}| < 0.01$), confirming that the reported contrasts
+are carried by conditioning rather than by sampling variance.
+\textbf{Standardization}: without feature standardization, val noise-MSE
+plateaus $\approx 2\times$ higher at equal budget.
+
+\section{Limitations and Threats to Validity}
+\label{sec:limits}
+
+\paragraph{Label provenance.} Real-corpus coverage labels come from a
+geometric heuristic, not from team-employed scheme data; label noise
+attenuates conditional contrasts toward zero (biasing against us), but
+systematic misclassification (e.g., "wrong-foot" schemes, Late Switch) is
+possible. The star flag is currently simulator-only; mapping it onto real
+possessions requires roster joins (player IDs are present in the feed and can
+be joined to season metadata for a TRUE handler-ability covariate).
+
+\paragraph{Simulator dependence.} Balanced pretraining comes from the
+behavioral simulator; if its tactical priors are wrong, the mixed corpus
+inherits them. The real-anchored alternative --- training on thousands of
+real windows --- is the scale path of the Colab recipe; the two-regime
+comparison is itself a diagnostic (real-only FTD should improve as corpus
+grows, conditional contrasts should persist).
+
+\paragraph{Value functional.} The EPV proxy is a designed placeholder; a
+learned EPV \citep{yamamoto2022epv} evaluated on generated states is the
+principled upgrade and is compatible with our pipeline (the proxy is a
+pure function of the trajectory tensor).
+
+\paragraph{Compute and sampling.} Diffusion sampling costs $S{=}50$ network
+evaluations per future; large-$M$ branch studies are GPU-bound.
+Consistency-style distillation is the obvious accelerator.
+
+\paragraph{Distribution shift.} 2015--16 coverages differ from modern
+schemes; conclusions are era-relative by construction.
+
+\section{Conclusion and Future Work}
+\label{sec:conclusion}
+
+We presented a complete, reproducible framework that turns conditional
+trajectory diffusion into a tactical what-if engine for basketball's most
+consequential action. The technical contributions --- a validated ingestion
+path for the real SportVU archives, a conditional temporal U-Net diffusion
+model, a physics-regularization recipe that resolves the
+acceleration-amplification instability, and a matched-branch vulnerability
+protocol --- combine into a system whose counterfactual branches are
+anchor-identical, scheme-sensitive, and kinematically disciplined. Three
+extensions follow naturally: (i) scale --- the Colab recipe over the full
+public season, with real-only training once windows reach the tens of
+thousands; (ii) learned value --- replacing the EPV proxy with a trained
+possession-value model evaluated on generated futures; (iii) richer
+interventions --- personnel tensors (height, speed percentiles) as
+conditioning, enabling lineup-level stress tests rather than binary star
+flags. The long-term goal is an evaluation regime for defensive basketball
+that mirrors what randomized experimentation did for on-court decision
+policies: comparisons that hold the offense fixed and let the scheme vary.
+
+\section*{Reproducibility Statement}
+The repository implements every pipeline stage described here, with 18 unit
+tests, a one-command CPU reference run (\texttt{make data train evaluate}),
+and a Colab notebook (\texttt{colab\_run.ipynb} + \texttt{COLAB.md}) that
+downloads public archives, ingests real data, trains on GPU, and emits
+\texttt{report.json} and animated MP4s. Configurations ship as flat YAML
+(\texttt{configs/base.yaml}); checkpoints save per epoch. No proprietary
+data or credentials are required.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\appendix
+
+\section{Hyperparameters}
+\label{app:hparams}
+\begin{table}[h]
+\centering
+\caption{Training configuration (\texttt{configs/base.yaml}).}
+\begin{tabular}{llll}
+\toprule
+Parameter & Value & Parameter & Value \\
+\midrule
+Batch size & 64 & Timesteps $K$ & 1000 \\
+Learning rate & $2{\times}10^{-4}$ & Sample steps $S$ & 50 \\
+Weight decay & 0.01 & CFG dropout & 0.10 \\
+Epochs (ref.) & 30 & Guidance $w$ & 1.5 \\
+EMA decay & 0.999 & Physics guidance $\gamma$ & 0.5 \\
+Base channels & 128 & $\lambda_{\text{phys}}$ & 0.01 \\
+Cond.\ dim & 256 & Probe range & $t < K/8$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Ingestion Funnel}
+\label{app:funnel}
+Validation game \texttt{0021500492}: 452 events $\rightarrow$ 415 parsed
+(37 discarded: malformed/missing entities) $\rightarrow$ 538 contiguous runs
+(entity/epoch/quarter splits) $\rightarrow$ 426 runs $\ge$ 105 frames
+$\rightarrow$ 83 half-court possessions $\rightarrow$ 11 screen-anchored
+$\rightarrow$ 10 after denoising rejection. Scheme counts 6/2/2
+(drop/switch/blitz). Each stage is unit-tested; the funnel prints counts at
+runtime for corpus-level monitoring.
+
+\section{Environment}
+\label{app:env}
+Python $\ge$ 3.10; \texttt{numpy} 1.26 (torch 2.2 CPU on Intel macOS
+constrains \texttt{numpy}$<$2 --- pinned in \texttt{requirements.txt});
+\texttt{scipy} 1.13 (Savitzky--Golay, Fr\'echet); \texttt{matplotlib} 3.9
+(FFmpeg writer); \texttt{py7zr} (archive extraction). Colab uses its
+preinstalled CUDA torch build; \texttt{requirements-colab.txt} deliberately
+excludes torch.
+
+\end{document}

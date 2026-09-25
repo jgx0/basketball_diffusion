@@ -1,0 +1,6 @@
+# Colab-specific requirements.
+# NOTE: torch is intentionally NOT listed — Colab's preinstalled build ships
+# with CUDA support and a compatible numpy stack. Do not pip-install torch.
+py7zr>=0.20
+tqdm>=4.66
+pytest>=8

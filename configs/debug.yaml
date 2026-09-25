@@ -1,0 +1,20 @@
+# Debug config: physics loss disabled to isolate training stability
+seed: 0
+batch_size: 64
+lr: 0.0002
+weight_decay: 0.01
+epochs: 8
+n_steps: 1000
+sample_steps: 50
+base_channels: 128
+time_dim: 256
+cond_dim: 256
+lam_vel: 0.0
+lam_acc: 0.0
+lam_col: 0.0
+lam_bound: 0.0
+cfg_dropout: 0.1
+ema_decay: 0.999
+data_dir: outputs/processed_tensors
+ckpt_dir: outputs/checkpoints
+log_every: 5

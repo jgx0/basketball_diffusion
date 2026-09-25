@@ -1,0 +1,13 @@
+# Core — pinned to the versions verified in CI on Intel macOS.
+# torch 2.2.x (last CPU build for x86_64 mac) requires numpy<2.
+numpy>=1.24,<2
+pandas>=2.0,<3
+scipy>=1.11,<1.14
+matplotlib>=3.8,<3.10
+tqdm>=4.66,<5
+pytest>=8
+py7zr>=0.20
+
+# Deep learning
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.2,<2.3

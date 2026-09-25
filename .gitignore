@@ -1,0 +1,36 @@
+# Data & artifacts (never commit)
+data/raw/
+data/processed/
+data/playbyplay/
+outputs/
+models/
+*.pt
+*.pth
+*.ckpt
+*.mp4
+*.json.gz
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# LaTeX
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.synctex.gz
+paper/*.bbl
+paper/*.blg
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.pdf
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/

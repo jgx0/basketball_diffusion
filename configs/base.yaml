@@ -1,0 +1,24 @@
+# Base training configuration (parsed by scripts/train.py without PyYAML)
+seed: 0
+batch_size: 64
+lr: 0.0002
+weight_decay: 0.01
+epochs: 30
+n_steps: 1000
+sample_steps: 50
+base_channels: 128
+time_dim: 256
+cond_dim: 256
+# physics loss weights (training regularizer is intentionally small;
+# most physics enforcement happens as sampling-time guidance)
+phys_weight: 0.01
+lam_vel: 1.0
+lam_acc: 1.0
+lam_col: 1.0
+lam_bound: 0.0
+# classifier-free guidance dropout during training
+cfg_dropout: 0.1
+ema_decay: 0.999
+data_dir: outputs/processed_tensors
+ckpt_dir: outputs/checkpoints
+log_every: 50
