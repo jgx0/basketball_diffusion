@@ -84,9 +84,12 @@ def main() -> None:
             f"| EPV proxy {epv_proxy(gen).mean():.3f}"
         )
         if args.render:
-            from src.visualize import render_gif  # local import
+            try:
+                from src.visualize import render_gif  # local import
 
-            render_gif(gen[0], str(out_dir / f"scheme_{name}.mp4"))
+                render_gif(gen[0].cpu().numpy(), str(out_dir / f"scheme_{name}.mp4"))
+            except Exception as e:  # rendering must never kill the metrics run
+                print(f"  [warn] render failed for {name}: {e}")
 
     if args.star_swap:
         c0 = {

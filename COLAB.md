@@ -158,6 +158,7 @@ recipe, which the notebook demonstrates).
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
+| `can't convert cuda:0 device type tensor to numpy` in cell 7 | pre-fix repo version | `git pull` in the repo dir (or `!sed -i 's/render_gif(gen\[0\], str/render_gif(gen[0].cpu().numpy(), str/' scripts/generate.py`) and rerun cells 7–8; data/checkpoints from cells 4–6 are reused, no retraining. |
 | `py7zr` install fails | Colab pip cache | Restart runtime, rerun Cell 2. |
 | `No SportVU files under data/raw` | download blocked | Check `ls data/raw`; rerun Cell 4. |
 | `extracted 0 PnR windows` | detector found none | Loosen `detect_ball_screen` (`contact_dist` 1.2→1.4) in `src/normalize.py`. |

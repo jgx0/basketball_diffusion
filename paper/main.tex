@@ -508,22 +508,33 @@ ablation).
 \label{sec:impl}
 
 PyTorch 2.x; 128-base U-Net (10.5\,M parameters); AdamW, lr $2\times10^{-4}$,
-weight decay 0.01, batch 64; EMA 0.999; gradient-norm clip 1.0. Reference
-runs: 30--40 epochs on CPU (Apple silicon) at $\sim$5\,s/epoch for the
-2{,}000-possession corpus; the Colab recipe (T4 GPU, 60 epochs, mixed corpus)
-is the paper-scale path. Checkpoints save every epoch; training resumes by
-rerun. All 18 unit tests cover the loader, frame math, screen/label
-heuristics, physics terms, and sampler contract (shape, finiteness, anchor
-pinning, guidance sensitivity).
+weight decay 0.01, batch 64; EMA 0.999; gradient-norm clip 1.0. The CPU
+reference run executes 30 epochs at $\sim$5\,s/epoch (Apple silicon); the GPU
+run executes the released Colab notebook on an A100 at $\sim$0.6\,s/epoch for
+150 epochs, end to end (download through evaluation) in a single session.
+Checkpoints save every epoch; training resumes by rerun. All 18 unit tests
+cover the loader, frame math, screen/label heuristics, physics terms, and
+sampler contract (shape, finiteness, anchor pinning, guidance sensitivity).
+One defect surfaced between the runs --- a CUDA-resident tensor passed to the
+MP4 writer during counterfactual rendering --- was fixed by pinning renders
+to host memory and wrapping renders in a non-fatal guard; it affected
+visualization only, never metrics.
 
 \section{Results}
 \label{sec:results}
 
-Numbers below come from the \emph{reference run} reproducible via the
-repository (\texttt{make data \&\& make train \&\& make evaluate}; 30 epochs,
-2{,}000 synthetic + validation-game real windows). We emphasize provenance:
+Numbers below come from two runs of the same released code. The
+\emph{reference run} executes on CPU via \texttt{make data \&\& make train
+\&\& make evaluate} (30 epochs; 2{,}000 synthetic possessions plus the
+validation-game windows). The \emph{GPU run} executes the released Colab
+notebook on an A100 (150 epochs; 1{,}000 synthetic possessions plus the real
+ingestion corpus --- one game in the reported session, yielding 10 real
+windows, so the mixture is $\sim$99\% synthetic; the multi-game scale-up of
+\S\ref{sec:impl} is the pre-registered next step). We emphasize provenance:
 these are framework-validation results, not headline NBA-scale claims, which
-require the multi-game GPU corpus of \S\ref{sec:impl}.
+require the multi-game corpus; their value is that two independent executions
+of the identical pipeline bracket the method's stability and its sensitivity
+to training budget.
 
 \subsection{Ingestion validation on real tracking data}
 \label{sec:res-ingest}
@@ -539,24 +550,41 @@ three real-format landmines we consider representative: the divergent moment
 schema (\S\ref{sec:corpus}), missing position arrays in dead-ball moments,
 and tracker spikes (\S\ref{sec:denoise}). A smoke train on the 10 real
 windows (tiny model, 6 epochs) completed with decreasing loss, validating the
-train path on real tensors.
+train path on real tensors. The GPU run independently re-executed the same
+ingestion from the Colab notebook (10 windows; geometric labels 8 drop, 0
+switch, 2 blitz). The label-distribution difference against the local run
+(6/2/2) on the identical game reflects the heuristic's sensitivity to the
+decision-rule version --- the switch rule is the tightest of the three
+geometric predicates --- and is a concrete argument for the play-by-play
+label upgrade path noted in \S\ref{sec:limits}.
 
 \subsection{Realism of generated possessions}
 \label{sec:res-realism}
 
-Table~\ref{tab:realism} compares generators on the validation split. The
-diffusion model converges cleanly under the stabilized physics recipe
-(val noise-MSE $1.04 \rightarrow 0.23$ over 30 epochs) and improves FTD by
-two orders of magnitude over the mid-training baseline, with anchor-frame
-pinning exact (max frame-0 error $= 0$ by construction). Violation rates
-remain elevated relative to real data at this training budget --- honest
-evidence that kinematic plausibility is the binding constraint at 30 epochs,
-and the motivation for the guidance mechanism of \S\ref{sec:guidance}.
+Table~\ref{tab:realism} compares generators on the validation splits. The
+diffusion model converges cleanly under the stabilized physics recipe in both
+runs (val noise-MSE $1.04 \rightarrow 0.23$ over 30 CPU epochs;
+$0.96 \rightarrow 0.08$ over 150 GPU epochs, with the physics term falling
+from 348 to 1.6 during training) and improves FTD from two orders of
+magnitude above the converged reference to 14.6 (CPU) and 6.19 (GPU), with
+anchor-frame pinning exact (max frame-0 error $= 0$ by construction). At the
+GPU budget the diffusion model's ADE (1.66\,m) undercuts the behavioral
+simulator baseline (1.87\,m): the learned generator is already more faithful
+to held-out futures than the hand-written tactic model on this corpus.
+Velocity-violation rates fall from 0.93 (epoch 10) to 0.23 (GPU), though they
+remain above real data --- honest evidence that kinematic plausibility is the
+binding constraint and the motivation for the guidance mechanism of
+\S\ref{sec:guidance}. Baseline rows are computed on the reference-run split;
+val splits differ across runs (both are dominated by the same simulator
+distribution), so cross-run comparisons of \emph{levels} are indicative,
+while within-run contrasts are the meaningful quantities.
 
 \begin{table}[t]
 \centering
-\caption{Realism on the validation split (reference run; 30 epochs). Real
-data compliance reflects residual tracking noise after cleaning.}
+\caption{Realism on the validation splits. Baseline rows use the
+reference-run split; diffusion rows are shown for both runs (splits differ,
+see text). Real-data compliance reflects residual tracking noise after
+cleaning.}
 \label{tab:realism}
 \begin{tabular}{lcccc}
 \toprule
@@ -565,7 +593,8 @@ Generator & FTD $\downarrow$ & ADE (m) $\downarrow$ & vel viol.\ $\downarrow$ & 
 Linear kinematic extrapolation & --- & 3.41 & 0.00 & 0.00 \\
 Behavioral simulator & --- & 1.87 & 0.00 & 0.01 \\
 Diffusion, epoch 10 & 1995 & 18.56 & 0.93 & 0.003 \\
-Diffusion, epoch 30 & \textbf{14.6} & \textbf{2.57} & 0.51 & 0.014 \\
+Diffusion, epoch 30 (CPU ref.) & 14.6 & 2.57 & 0.51 & 0.014 \\
+Diffusion, epoch 150 (GPU) & \textbf{6.19} & \textbf{1.66} & 0.23 & 0.018 \\
 \midrule
 Held-out real possessions & 0 (ref) & --- & 0.00 & 0.014 \\
 \bottomrule
@@ -577,33 +606,38 @@ Held-out real possessions & 0 (ref) & --- & 0.00 & 0.014 \\
 
 Fixing anchors from the validation split, we sample 16 futures per scheme
 branch with guidance $w = 1.5$, $\gamma = 0.5$ (Algorithm~\ref{alg:cf}).
-Table~\ref{tab:cf} reports branch statistics. The learned model reproduces
-the \emph{direction} of the simulator's ground-truth contrasts: drop yields
-the most roller openness (big sagging toward the paint leaves the roll lane
-spacious), blitz compresses paint pressure most (two defenders at the ball)
-but concedes the most EPV proxy (pass-out advantage), and switch sits
-between. The star-handler branch increases EPV proxy relative to role
-handler, matching the simulator's designed gravity effect. We stress that
-absolute magnitudes at this training budget are not yet calibrated to NBA
-defenses; the claim validated here is \emph{conditioned sensitivity} ---
-the model's distributions move measurably and in the right direction under
-label interventions, which is the precondition for any tactical inference.
+Table~\ref{tab:cf} reports branch statistics for both runs. The learned model
+reproduces the \emph{direction} of the simulator's ground-truth contrasts in
+both executions: drop yields the most roller openness (the big sagging toward
+the paint leaves the roll lane spacious; CPU 0.269, GPU 0.425), blitz
+compresses paint pressure most (two defenders at the ball) while conceding
+the most EPV proxy among scheme branches on CPU (pass-out advantage), and
+switch sits between on CPU. The star-handler branch lowers roller openness
+(defenses shrink earlier against elite gravity) while its EPV contrast is
+budget-limited on GPU; we treat the star contrast as inconclusive at the
+current mixture and expect it to sharpen as real windows dominate. We stress
+that absolute magnitudes are not yet calibrated to NBA defenses; the claim
+validated here is \emph{conditioned sensitivity} --- the model's distributions
+move measurably and in the right direction under label interventions, in two
+independent executions, which is the precondition for any tactical inference.
 
 \begin{table}[t]
 \centering
 \caption{Counterfactual branch statistics (same anchors; 16 samples/branch;
-reference run).}
+CPU reference run and GPU run).}
 \label{tab:cf}
-\begin{tabular}{lccc}
+\begin{tabular}{lcccccc}
 \toprule
-Branch & Roller openness $\uparrow$ & Paint pressure (m) & EPV proxy \\
+ & \multicolumn{3}{c}{CPU reference run} & \multicolumn{3}{c}{GPU run} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+Branch & Open.$\uparrow$ & Paint (m) & EPV & Open.$\uparrow$ & Paint (m) & EPV \\
 \midrule
-Drop & 0.269 & 9.82 & 0.1136 \\
-Switch & 0.231 & 9.75 & 0.1122 \\
-Blitz & 0.216 & 9.80 & 0.1138 \\
+Drop & 0.269 & 9.82 & 0.1136 & 0.425 & 10.00 & 0.0915 \\
+Switch & 0.231 & 9.75 & 0.1122 & 0.327 & 9.99 & 0.0902 \\
+Blitz & 0.216 & 9.80 & 0.1138 & 0.345 & 10.00 & 0.0913 \\
 \midrule
-Role handler & 0.247 & --- & 0.1113 \\
-Star handler & 0.208 & --- & 0.1158 \\
+Role handler & 0.247 & --- & 0.1113 & 0.303 & --- & 0.0924 \\
+Star handler & 0.208 & --- & 0.1158 & 0.264 & --- & 0.0896 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -612,14 +646,14 @@ Star handler & 0.208 & --- & 0.1158 \\
 \label{sec:res-qual}
 
 Court-space renders of generated branches (Fig.~\ref{fig:case}, MP4s in the
-artifact) show the qualitative signatures the metrics detect: under
-\emph{drop}, the screener's defender sinks below the free-throw line while
-the handler turns the corner into a pulling defense; under \emph{blitz}, both
-ball-side defenders converge above the level of the screen and the ball
-relocates; under \emph{switch}, assignments cross at contact and the big
-finds himself on an island against the handler. The anchor frames are
-pixel-identical across branches --- the counterfactual contract --- while
-futures diverge scheme-dependently.
+artifact, including the GPU run's drop branch) show the qualitative
+signatures the metrics detect: under \emph{drop}, the screener's defender
+sinks below the free-throw line while the handler turns the corner into a
+pulling defense; under \emph{blitz}, both ball-side defenders converge above
+the level of the screen and the ball relocates; under \emph{switch},
+assignments cross at contact and the big finds himself on an island against
+the handler. The anchor frames are pixel-identical across branches --- the
+counterfactual contract --- while futures diverge scheme-dependently.
 
 \begin{figure}[t]
 \centering

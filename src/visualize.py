@@ -50,8 +50,14 @@ def draw_half_court(ax: plt.Axes) -> None:
     ax.plot([-1.2, 0], [-corner_y, -corner_y], color="black", lw=1)
 
 
-def render_gif(traj: np.ndarray, path: str | Path, fps: int = 25) -> Path:
-    """Render a (T, 11, 4) trajectory tensor to an MP4 of the half court."""
+def render_gif(traj, path: str | Path, fps: int = 25) -> Path:
+    """Render a (T, 11, 4) trajectory tensor to an MP4 of the half court.
+
+    Accepts numpy arrays or torch tensors on any device (CUDA tensors are
+    copied to host memory first).
+    """
+    if "torch" in str(type(traj)):
+        traj = traj.detach().cpu().numpy()
     traj = np.asarray(traj)
     T = traj.shape[0]
     fig, ax = plt.subplots(figsize=(7, 6.5))
